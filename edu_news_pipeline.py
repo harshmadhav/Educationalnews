@@ -138,7 +138,7 @@ def deduplicate_articles(articles):
 # 4. THUMBNAIL — try to pull og:image from the article page
 # ---------------------------------------------------------------------
 
-def get_thumbnail(url, timeout=5):
+def get_thumbnail(url, timeout=10):
     try:
         resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
         soup = BeautifulSoup(resp.text, "html.parser")

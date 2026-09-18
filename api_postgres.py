@@ -23,7 +23,7 @@ RUN:
 
 The table is created automatically on startup, using schema_postgres.sql.
 """
-
+from datetime import datetime
 import os
 from contextlib import contextmanager
 from typing import Optional, List
@@ -93,7 +93,7 @@ class NewsCardOut(NewsCardIn):
     id: int
     source_domain: Optional[str] = None
     status: str
-    created_at: str
+    created_at: datetime
 
 
 class NewsCardEdit(BaseModel):
@@ -308,3 +308,19 @@ def edit_card(card_id: int, edit: NewsCardEdit):
             if not row:
                 raise HTTPException(status_code=404, detail="Not found")
             return row
+            
+
+@app.post("/api/admin/reset-to-draft", dependencies=[Depends(verify_admin)])
+def reset_all_to_draft():
+    """
+    One-time fix: sets every card back to 'draft' and updates the
+    column default, in case cards were created before this schema
+    change reached the deployed database. Safe to call more than once.
+    """
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("ALTER TABLE news_cards ALTER COLUMN status SET DEFAULT 'draft'")
+            cur.execute("UPDATE news_cards SET status = 'draft' WHERE status = 'published'")
+            updated = cur.rowcount
+            conn.commit()
+    return {"reset_to_draft": updated}
