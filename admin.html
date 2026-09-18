@@ -47,6 +47,11 @@
   .card{
     border:1px solid var(--line); border-radius:12px; padding:18px; background:var(--paper-dim);
   }
+  .thumb{
+    height:120px; border-radius:8px; margin-bottom:14px; position:relative; overflow:hidden;
+  }
+  .thumb-art{ position:absolute; inset:0; width:100%; height:100%; }
+  .thumb-photo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;}
   .tag{ font-size:.72rem; font-weight:600; color:var(--meta); text-transform:none; }
   .headline{
@@ -59,7 +64,9 @@
     min-height:100px;
   }
   textarea:focus, .headline:focus{ border-color:var(--line); outline:none; background:var(--paper); }
-  .meta{ font-size:.8rem; color:var(--meta); margin:8px 0 14px; word-break:break-all; }
+  .meta{ font-size:.8rem; margin:8px 0 14px; }
+  .meta a{ color:var(--meta); text-decoration:none; border-bottom:1px solid var(--line); }
+  .meta a:hover{ color:var(--ink); }
   .actions{ display:flex; gap:8px; flex-wrap:wrap; }
   .empty{ text-align:center; color:var(--meta); padding:60px 20px; font-size:.95rem; }
 </style>
@@ -83,6 +90,51 @@
 <script>
 let API_BASE = "";
 let TOKEN = "";
+
+const CATS = {
+  competitive_exams: { color: "#1F7A70" },
+  govt_jobs:          { color: "#D9542A" },
+  private_jobs:       { color: "#5B5F97" },
+  courses:            { color: "#F2A93B" },
+};
+
+const THUMB_ART = {
+  competitive_exams: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <rect x="150" y="24" width="110" height="130" rx="6" fill="#fff" opacity="0.14"/>
+    <rect x="168" y="44" width="74" height="8" rx="4" fill="#fff" opacity="0.3"/>
+    <rect x="168" y="62" width="60" height="6" rx="3" fill="#fff" opacity="0.22"/>
+    <rect x="168" y="76" width="60" height="6" rx="3" fill="#fff" opacity="0.22"/>
+    <rect x="168" y="90" width="46" height="6" rx="3" fill="#fff" opacity="0.22"/>
+    <circle cx="230" cy="122" r="26" fill="#fff" opacity="0.18"/>
+    <path d="M218 122l8 8 16-16" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+  </svg>`,
+  govt_jobs: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <rect x="150" y="120" width="120" height="10" rx="2" fill="#fff" opacity="0.28"/>
+    <path d="M158 118v-44l52-24 52 24v44" stroke="#fff" stroke-width="6" fill="none" opacity="0.22" stroke-linejoin="round"/>
+    <rect x="166" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <rect x="188" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <rect x="210" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <rect x="232" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <circle cx="210" cy="42" r="10" fill="#fff" opacity="0.3"/>
+  </svg>`,
+  private_jobs: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <rect x="160" y="76" width="100" height="66" rx="8" fill="#fff" opacity="0.16"/>
+    <rect x="190" y="60" width="40" height="20" rx="4" fill="none" stroke="#fff" stroke-width="5" opacity="0.24"/>
+    <rect x="160" y="94" width="100" height="8" fill="#fff" opacity="0.12"/>
+    <path d="M172 128l20-24 16 14 26-30" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+    <path d="M222 88h14v14" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  </svg>`,
+  courses: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <path d="M156 96l54-20 54 20-54 20-54-20z" fill="#fff" opacity="0.22"/>
+    <path d="M180 106v26c0 6 14 12 30 12s30-6 30-12v-26" stroke="#fff" stroke-width="5" fill="none" opacity="0.24"/>
+    <line x1="264" y1="96" x2="264" y2="126" stroke="#fff" stroke-width="4" opacity="0.3"/>
+    <rect x="168" y="46" width="72" height="10" rx="5" fill="#fff" opacity="0.16"/>
+  </svg>`,
+};
+
+function thumbArt(cat){
+  return THUMB_ART[cat] || THUMB_ART.competitive_exams;
+}
 
 const listEl = document.getElementById('list');
 const countEl = document.getElementById('count');
@@ -129,21 +181,28 @@ function render(cards){
     return;
   }
 
-  listEl.innerHTML = cards.map(c => `
+  listEl.innerHTML = cards.map(c => {
+    const color = (CATS[c.category] && CATS[c.category].color) || "#5B5F97";
+    const thumbInner = c.thumbnail_url
+      ? `<img src="${c.thumbnail_url}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.category).replace(/'/g,"&#39;").replace(/\n/g,'')}'">`
+      : thumbArt(c.category);
+    return `
     <div class="card" data-id="${c.id}">
+      <div class="thumb" style="background:${color}">${thumbInner}</div>
       <div class="card-top">
         <span class="tag">${c.category} · ${c.source_domain || ''}</span>
       </div>
       <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
       <textarea data-field="summary">${c.summary}</textarea>
-      <p class="meta">${c.source_link}</p>
+      <p class="meta"><a href="${c.source_link}" target="_blank" rel="noopener">View original source ↗</a></p>
       <div class="actions">
         <button class="btn approve" data-action="approve">Approve</button>
         <button class="btn reject" data-action="reject">Reject</button>
         <button class="btn" data-action="save">Save edits</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function escapeAttr(s){

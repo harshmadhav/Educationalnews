@@ -141,6 +141,13 @@ def deduplicate_articles(articles):
 def get_thumbnail(url, timeout=5):
     if url.lower().endswith(".pdf"):
         return None  # PDFs never have a preview photo — skip the request
+    if "news.google.com" in url:
+        # Google News links are redirect pages, not the real article —
+        # scraping og:image here is unreliable (sometimes returns
+        # Google's own logo instead of a real photo). Skip it and use
+        # the category illustration instead until this resolves the
+        # actual publisher URL first.
+        return None
     try:
         resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
         soup = BeautifulSoup(resp.text, "html.parser")
