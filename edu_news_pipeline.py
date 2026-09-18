@@ -132,7 +132,7 @@ def deduplicate_articles(articles):
 # 4. THUMBNAIL — try to pull og:image from the article page
 # ---------------------------------------------------------------------
 
-def get_thumbnail(url, timeout=60):
+def get_thumbnail(url, timeout=10):
     try:
         resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -219,7 +219,7 @@ def push_to_api(cards):
         for c in cards
     ]
     try:
-        resp = requests.post(f"{API_URL}/api/news/bulk", json=payload, timeout=10)
+        resp = requests.post(f"{API_URL}/api/news/bulk", json=payload, timeout=60)
         resp.raise_for_status()
         result = resp.json()
         print(f"Pushed to API: {result['added']} added, "
