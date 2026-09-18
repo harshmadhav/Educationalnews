@@ -23,6 +23,12 @@ from bs4 import BeautifulSoup
 from anthropic import Anthropic
 from difflib import SequenceMatcher
 
+try:
+    from nta_scraper import fetch_all_nta_exam_notices
+    NTA_SCRAPER_AVAILABLE = True
+except ImportError:
+    NTA_SCRAPER_AVAILABLE = False
+
 # ---------------------------------------------------------------------
 # 1. CONFIG — add/remove feeds per category
 # ---------------------------------------------------------------------
@@ -219,7 +225,7 @@ def push_to_api(cards):
         for c in cards
     ]
     try:
-        resp = requests.post(f"{API_URL}/api/news/bulk", json=payload, timeout=10)
+        resp = requests.post(f"{API_URL}/api/news/bulk", json=payload, timeout=60)
         resp.raise_for_status()
         result = resp.json()
         print(f"Pushed to API: {result['added']} added, "
@@ -235,6 +241,19 @@ def run_pipeline():
     for category, feed_url in RSS_FEEDS.items():
         print(f"Fetching: {category} ...")
         all_articles.extend(fetch_articles(feed_url, category))
+
+    # Also pull real notices directly from NTA's exam portals (JEE Main,
+    # NEET, CUET, UGC NET, CSIR NET, CMAT, ICAR, NCHM JEE, NIFT, SWAYAM),
+    # if the scraper module is present alongside this script.
+    if NTA_SCRAPER_AVAILABLE:
+        print("Fetching: NTA exam portals ...")
+        try:
+            all_articles.extend(fetch_all_nta_exam_notices())
+        except Exception as e:
+            print(f"  NTA scraper failed, continuing without it: {e}")
+    else:
+        print("nta_scraper.py not found — skipping NTA sources "
+              "(place it in the same folder to enable them).")
 
     # Step 2: remove duplicates across all categories/sources
     unique_articles = deduplicate_articles(all_articles)
