@@ -74,7 +74,14 @@
     height:170px; border-radius:10px; display:flex; align-items:flex-end;
     padding:12px; margin-bottom:16px; position:relative; overflow:hidden;
   }
+  .thumb-art{
+    position:absolute; inset:0; width:100%; height:100%;
+  }
+  .thumb-photo{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+  }
   .tag{
+    position:relative; z-index:1;
     font-size:.72rem; font-weight:600; color:#fff; background:rgba(0,0,0,.28);
     padding:4px 10px; border-radius:14px; letter-spacing:.2px;
   }
@@ -155,6 +162,44 @@ const SAMPLE_CARDS = [
    source:"rrbcdg.gov.in", link:"#"},
 ];
 
+const THUMB_ART = {
+  exams: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <rect x="150" y="24" width="110" height="130" rx="6" fill="#fff" opacity="0.14"/>
+    <rect x="168" y="44" width="74" height="8" rx="4" fill="#fff" opacity="0.3"/>
+    <rect x="168" y="62" width="60" height="6" rx="3" fill="#fff" opacity="0.22"/>
+    <rect x="168" y="76" width="60" height="6" rx="3" fill="#fff" opacity="0.22"/>
+    <rect x="168" y="90" width="46" height="6" rx="3" fill="#fff" opacity="0.22"/>
+    <circle cx="230" cy="122" r="26" fill="#fff" opacity="0.18"/>
+    <path d="M218 122l8 8 16-16" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+  </svg>`,
+  govt: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <rect x="150" y="120" width="120" height="10" rx="2" fill="#fff" opacity="0.28"/>
+    <path d="M158 118v-44l52-24 52 24v44" stroke="#fff" stroke-width="6" fill="none" opacity="0.22" stroke-linejoin="round"/>
+    <rect x="166" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <rect x="188" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <rect x="210" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <rect x="232" y="74" width="10" height="44" fill="#fff" opacity="0.2"/>
+    <circle cx="210" cy="42" r="10" fill="#fff" opacity="0.3"/>
+  </svg>`,
+  private: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <rect x="160" y="76" width="100" height="66" rx="8" fill="#fff" opacity="0.16"/>
+    <rect x="190" y="60" width="40" height="20" rx="4" fill="none" stroke="#fff" stroke-width="5" opacity="0.24"/>
+    <rect x="160" y="94" width="100" height="8" fill="#fff" opacity="0.12"/>
+    <path d="M172 128l20-24 16 14 26-30" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+    <path d="M222 88h14v14" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  </svg>`,
+  courses: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
+    <path d="M156 96l54-20 54 20-54 20-54-20z" fill="#fff" opacity="0.22"/>
+    <path d="M180 106v26c0 6 14 12 30 12s30-6 30-12v-26" stroke="#fff" stroke-width="5" fill="none" opacity="0.24"/>
+    <line x1="264" y1="96" x2="264" y2="126" stroke="#fff" stroke-width="4" opacity="0.3"/>
+    <rect x="168" y="46" width="72" height="10" rx="5" fill="#fff" opacity="0.16"/>
+  </svg>`,
+};
+
+function thumbArt(catKey){
+  return THUMB_ART[catKey] || THUMB_ART.exams;
+}
+
 const API_BASE = "https://YOUR-API-NAME.onrender.com"; // <-- set this to your deployed Render URL
 
 const CARDS_FROM_PIPELINE_KEY = {
@@ -190,6 +235,7 @@ function mapApiCards(raw){
       summary: item.summary,
       source: (item.source_link || "").replace(/^https?:\/\//,'').split('/')[0],
       link: item.source_link || "#",
+      photo: item.thumbnail_url || null,
     };
   });
 }
@@ -286,7 +332,7 @@ function render(){
 
   feedEl.innerHTML = visible.map(c=>`
     <article class="card">
-      <div class="thumb" style="background:${c.color}"><span class="tag">${c.tag}</span></div>
+      <div class="thumb" style="background:${c.color}">${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}<span class="tag">${c.tag}</span></div>
       <h2 class="headline">${c.headline}</h2>
       <p class="summary">${c.summary}</p>
       <div class="meta-row">

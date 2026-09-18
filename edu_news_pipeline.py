@@ -138,7 +138,9 @@ def deduplicate_articles(articles):
 # 4. THUMBNAIL — try to pull og:image from the article page
 # ---------------------------------------------------------------------
 
-def get_thumbnail(url, timeout=10):
+def get_thumbnail(url, timeout=5):
+    if url.lower().endswith(".pdf"):
+        return None  # PDFs never have a preview photo — skip the request
     try:
         resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
         soup = BeautifulSoup(resp.text, "html.parser")
@@ -147,7 +149,7 @@ def get_thumbnail(url, timeout=10):
             return tag["content"]
     except Exception:
         pass
-    return None  # frontend should fall back to a category placeholder image
+    return None  # frontend falls back to the category's vector illustration
 
 
 # ---------------------------------------------------------------------
