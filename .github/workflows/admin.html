@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyBrief — Review Queue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14213D; --paper:#FAFAF7; --paper-dim:#F0EEE6;
+    --amber:#F2A93B; --teal:#1F7A70; --coral:#D9542A;
+    --meta:#6B7280; --line:#E4E1D8;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#F4F2EA; --paper:#12131A; --paper-dim:#1A1C25;
+      --meta:#9A9AA5; --line:#2A2C36;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#F4F2EA; --paper:#12131A; --paper-dim:#1A1C25;
+    --meta:#9A9AA5; --line:#2A2C36;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; }
+  header{
+    position:sticky; top:0; background:var(--paper); border-bottom:1px solid var(--line);
+    padding:16px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  h1{ font-family:'Source Serif 4',serif; font-size:1.25rem; margin:0; }
+  .token-row{ display:flex; gap:8px; align-items:center; }
+  input[type=password], input[type=text]{
+    font-family:inherit; font-size:.85rem; padding:7px 10px; border-radius:8px;
+    border:1px solid var(--line); background:var(--paper-dim); color:var(--ink); width:200px;
+  }
+  .btn{
+    font-family:inherit; font-size:.82rem; font-weight:600; border-radius:8px; border:1px solid var(--line);
+    padding:7px 14px; cursor:pointer; background:var(--paper-dim); color:var(--ink);
+  }
+  .btn.primary{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .btn.approve{ background:var(--teal); color:#fff; border-color:var(--teal); }
+  .btn.reject{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .count{ font-size:.85rem; color:var(--meta); }
+
+  main{ max-width:760px; margin:0 auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
+  .card{
+    border:1px solid var(--line); border-radius:12px; padding:18px; background:var(--paper-dim);
+  }
+  .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;}
+  .tag{ font-size:.72rem; font-weight:600; color:var(--meta); text-transform:none; }
+  .headline{
+    font-family:'Source Serif 4',serif; font-weight:700; font-size:1.1rem; margin:0 0 8px;
+    width:100%; border:none; background:transparent; color:var(--ink); font-family:'Source Serif 4',serif;
+  }
+  textarea{
+    width:100%; font-family:'Inter',sans-serif; font-size:.92rem; line-height:1.55; color:var(--ink);
+    background:transparent; border:1px solid transparent; border-radius:8px; padding:6px; resize:vertical;
+    min-height:100px;
+  }
+  textarea:focus, .headline:focus{ border-color:var(--line); outline:none; background:var(--paper); }
+  .meta{ font-size:.8rem; color:var(--meta); margin:8px 0 14px; word-break:break-all; }
+  .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .empty{ text-align:center; color:var(--meta); padding:60px 20px; font-size:.95rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Review Queue</h1>
+  <div class="token-row">
+    <input type="text" id="apiBase" placeholder="API base URL">
+    <input type="password" id="tokenInput" placeholder="Admin token">
+    <button class="btn primary" id="loadBtn">Load</button>
+  </div>
+</header>
+
+<main>
+  <p class="count" id="count"></p>
+  <div id="list"></div>
+</main>
+
+<script>
+let API_BASE = "";
+let TOKEN = "";
+
+const listEl = document.getElementById('list');
+const countEl = document.getElementById('count');
+
+// Remember the last-used values in this browser only (not sent anywhere).
+document.getElementById('apiBase').value = localStorage.getItem('sb_api_base') || "";
+document.getElementById('tokenInput').value = localStorage.getItem('sb_token') || "";
+
+document.getElementById('loadBtn').addEventListener('click', loadQueue);
+
+async function loadQueue(){
+  API_BASE = document.getElementById('apiBase').value.trim().replace(/\/$/,'');
+  TOKEN = document.getElementById('tokenInput').value.trim();
+  localStorage.setItem('sb_api_base', API_BASE);
+  localStorage.setItem('sb_token', TOKEN);
+
+  if(!API_BASE || !TOKEN){
+    listEl.innerHTML = `<p class="empty">Enter your API base URL and admin token above.</p>`;
+    return;
+  }
+
+  listEl.innerHTML = `<p class="empty">Loading…</p>`;
+  try{
+    const res = await fetch(`${API_BASE}/api/admin/news?status=draft&limit=100`, {
+      headers: { "X-Admin-Token": TOKEN }
+    });
+    if(res.status === 401){
+      listEl.innerHTML = `<p class="empty">Token rejected — check it matches ADMIN_TOKEN on your server.</p>`;
+      return;
+    }
+    if(!res.ok) throw new Error(`Server returned ${res.status}`);
+    const cards = await res.json();
+    render(cards);
+  }catch(err){
+    listEl.innerHTML = `<p class="empty">Couldn't reach the API. Check the base URL and that your server is running.</p>`;
+  }
+}
+
+function render(cards){
+  countEl.textContent = `${cards.length} story/stories awaiting review`;
+
+  if(cards.length === 0){
+    listEl.innerHTML = `<p class="empty">Nothing waiting for review right now.</p>`;
+    return;
+  }
+
+  listEl.innerHTML = cards.map(c => `
+    <div class="card" data-id="${c.id}">
+      <div class="card-top">
+        <span class="tag">${c.category} · ${c.source_domain || ''}</span>
+      </div>
+      <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
+      <textarea data-field="summary">${c.summary}</textarea>
+      <p class="meta">${c.source_link}</p>
+      <div class="actions">
+        <button class="btn approve" data-action="approve">Approve</button>
+        <button class="btn reject" data-action="reject">Reject</button>
+        <button class="btn" data-action="save">Save edits</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeAttr(s){
+  return (s || "").replace(/"/g, "&quot;");
+}
+
+listEl.addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const cardEl = btn.closest('.card');
+  const id = cardEl.dataset.id;
+  const action = btn.dataset.action;
+
+  btn.disabled = true;
+  try{
+    if(action === 'approve'){
+      await fetch(`${API_BASE}/api/admin/news/${id}/approve`, {
+        method:'POST', headers:{ "X-Admin-Token": TOKEN }
+      });
+      cardEl.remove();
+    } else if(action === 'reject'){
+      await fetch(`${API_BASE}/api/admin/news/${id}/reject`, {
+        method:'POST', headers:{ "X-Admin-Token": TOKEN }
+      });
+      cardEl.remove();
+    } else if(action === 'save'){
+      const headline = cardEl.querySelector('[data-field=headline]').value;
+      const summary = cardEl.querySelector('[data-field=summary]').value;
+      await fetch(`${API_BASE}/api/admin/news/${id}`, {
+        method:'PATCH',
+        headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
+        body: JSON.stringify({ headline, summary })
+      });
+    }
+  }catch(err){
+    alert("Action failed — check your connection and try again.");
+  }
+  btn.disabled = false;
+
+  const remaining = listEl.querySelectorAll('.card').length;
+  countEl.textContent = `${remaining} story/stories awaiting review`;
+});
+</script>
+</body>
+</html>

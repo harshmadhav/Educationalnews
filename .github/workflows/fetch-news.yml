@@ -1,0 +1,59 @@
+name: Fetch and Publish News
+
+# Runs every 3 hours, and can also be triggered manually from the
+# "Actions" tab in GitHub for testing.
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+jobs:
+  fetch-news:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install feedparser requests anthropic beautifulsoup4
+
+      - name: Run the pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWS_API_URL: ${{ vars.NEWS_API_URL }}
+        run: |
+          python edu_news_pipeline.py
+
+      - name: Upload news_cards.json as a run artifact
+        # Keeps a copy of each run's output attached to the workflow run,
+        # useful for debugging even after the API push.
+        uses: actions/upload-artifact@v4
+        with:
+          name: news_cards
+          path: news_cards.json
+
+      - name: Email me if this run failed
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_APP_PASSWORD }}
+          subject: "❌ News pipeline failed — ${{ github.repository }}"
+          to: ${{ secrets.EMAIL_TO }}
+          from: StudyBrief Pipeline
+          body: |
+            The scheduled news-fetching run failed.
+
+            Repository: ${{ github.repository }}
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Check the run logs at the link above for details.

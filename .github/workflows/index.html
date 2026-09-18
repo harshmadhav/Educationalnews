@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyBrief</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14213D; --paper:#FAFAF7; --paper-dim:#F0EEE6;
+    --amber:#F2A93B; --teal:#1F7A70; --coral:#D9542A; --violet:#5B5F97;
+    --meta:#6B7280; --line:#E4E1D8;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#F4F2EA; --paper:#12131A; --paper-dim:#1A1C25;
+      --meta:#9A9AA5; --line:#2A2C36;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#F4F2EA; --paper:#12131A; --paper-dim:#1A1C25;
+    --meta:#9A9AA5; --line:#2A2C36;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  header{
+    position:sticky; top:0; z-index:10; background:var(--paper);
+    border-bottom:1px solid var(--line); padding:14px 16px 0;
+  }
+  .brand-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .brand{
+    font-family:'Source Serif 4',serif; font-weight:700; font-size:1.3rem; margin:0;
+  }
+  .load-btn{
+    font-size:.78rem; font-weight:600; color:var(--ink); background:var(--paper-dim);
+    border:1px solid var(--line); border-radius:16px; padding:6px 12px; cursor:pointer;
+    font-family:inherit;
+  }
+  .pull-indicator{
+    text-align:center; font-size:.78rem; color:var(--meta); padding:0; height:0;
+    overflow:hidden; transition:height .15s ease; max-width:480px; margin:0 auto;
+  }
+  .pull-indicator.show{ height:34px; padding-top:8px; }
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--paper); font-size:.82rem; font-weight:500;
+    padding:10px 18px; border-radius:20px; opacity:0; transition:all .25s ease;
+    pointer-events:none;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .tabs{ display:flex; gap:6px; overflow-x:auto; padding-bottom:10px; scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{
+    flex:0 0 auto; padding:7px 14px; border-radius:20px; border:1px solid var(--line);
+    background:transparent; color:var(--ink); font-size:.85rem; font-weight:500;
+    cursor:pointer; white-space:nowrap; font-family:inherit;
+  }
+  .tab.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+
+  .feed{
+    max-width:480px; margin:0 auto; height:calc(100vh - 78px);
+    overflow-y:auto; scroll-snap-type:y mandatory;
+  }
+  .card{
+    scroll-snap-align:start; min-height:calc(100vh - 78px);
+    display:flex; flex-direction:column; padding:20px 18px 28px;
+    border-bottom:1px solid var(--line);
+  }
+  .thumb{
+    height:170px; border-radius:10px; display:flex; align-items:flex-end;
+    padding:12px; margin-bottom:16px; position:relative; overflow:hidden;
+  }
+  .tag{
+    font-size:.72rem; font-weight:600; color:#fff; background:rgba(0,0,0,.28);
+    padding:4px 10px; border-radius:14px; letter-spacing:.2px;
+  }
+  .headline{
+    font-family:'Source Serif 4',serif; font-weight:700; font-size:1.32rem;
+    line-height:1.28; margin:0 0 10px;
+  }
+  .summary{
+    font-size:.96rem; line-height:1.62; color:var(--ink); opacity:.88;
+    margin:0 0 16px; max-width:64ch;
+  }
+  .meta-row{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:auto; font-size:.82rem; color:var(--meta);
+  }
+  .source-link{
+    color:var(--ink); font-weight:600; text-decoration:none;
+    border-bottom:1.5px solid var(--amber); padding-bottom:1px;
+  }
+  .source-link:hover{ opacity:.75; }
+  .progress{
+    display:flex; gap:4px; padding:10px 16px 0; max-width:480px; margin:0 auto;
+  }
+  .progress span{ height:3px; flex:1; background:var(--line); border-radius:2px; overflow:hidden; }
+  .progress span i{ display:block; height:100%; width:0; background:var(--ink); }
+  .progress span.seen i{ width:100%; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-row">
+    <p class="brand">StudyBrief</p>
+    <button class="load-btn" id="loadBtn">Load JSON</button>
+    <input type="file" id="fileInput" accept="application/json" style="display:none">
+  </div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<div class="pull-indicator" id="pullIndicator">Release to refresh</div>
+<div class="progress" id="progress"></div>
+
+<main class="feed" id="feed"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS = {
+  all: {label:"All"},
+  exams: {label:"Exams", color:"#1F7A70"},
+  govt: {label:"Govt Jobs", color:"#D9542A"},
+  private: {label:"Private Jobs", color:"#5B5F97"},
+  courses: {label:"Courses", color:"#F2A93B"},
+};
+
+const SAMPLE_CARDS = [
+  {cat:"exams", tag:"Exams", color:"#1F7A70",
+   headline:"UGC NET December session dates released",
+   summary:"The University Grants Commission has announced exam dates for the December cycle of UGC NET. Candidates can apply through the official portal starting next week. The exam covers over 80 subjects and is used for junior research fellowships and assistant professor eligibility. Officials confirmed the exam pattern remains unchanged this cycle, with two papers on the same day. Admit cards will be issued two weeks before the exam date. Students are advised to check their category-wise eligibility criteria on the official website before applying, as late corrections will not be accepted after the form closes.",
+   source:"ugcnet.nta.nic.in", link:"#"},
+  {cat:"govt", tag:"Govt Jobs", color:"#D9542A",
+   headline:"SSC opens 12,000 posts for Combined Graduate Level exam",
+   summary:"The Staff Selection Commission has opened applications for over 12,000 posts under the Combined Graduate Level recruitment. Vacancies span ministries including finance, home affairs, and railways. Graduates from any stream can apply, with age limits varying by post. The selection process includes two computer-based tests followed by a skill or document verification round. The application window stays open for three weeks, and the commission has waived the usual fee for female and reserved-category candidates. A detailed post-wise breakdown will be published closer to the exam date on the official recruitment page.",
+   source:"ssc.nic.in", link:"#"},
+  {cat:"courses", tag:"Courses", color:"#F2A93B",
+   headline:"IIM Bangalore launches 6-month data strategy program",
+   summary:"IIM Bangalore has introduced a six-month executive program in data strategy for working professionals. The course covers analytics, decision-making, and leadership through a mix of live online sessions and one campus visit. It is aimed at professionals with at least three years of experience in any field. Applications are being accepted on a rolling basis, with the first batch starting in November. The institute said the program includes mentorship from senior faculty and a capstone project based on the learner's own organisation. Fees can be paid in instalments, and limited scholarships are available for eligible candidates.",
+   source:"iimb.ac.in", link:"#"},
+  {cat:"private", tag:"Private Jobs", color:"#5B5F97",
+   headline:"TCS to hire 40,000 freshers this financial year",
+   summary:"Tata Consultancy Services has announced plans to hire around 40,000 freshers in the current financial year, mainly from engineering and computer science backgrounds. The hiring will happen through campus drives and the company's national qualifier test. Roles will span software development, cloud services, and cybersecurity. New hires will go through a structured training program before being assigned to project teams. The company said demand from clients in banking and retail sectors is driving the expansion. Interested candidates can register through the official careers page once campus drives are announced for their institution.",
+   source:"tcs.com", link:"#"},
+  {cat:"exams", tag:"Exams", color:"#1F7A70",
+   headline:"CBSE Class 10, 12 board exam datesheet expected next month",
+   summary:"The Central Board of Secondary Education is expected to release the datesheet for Class 10 and 12 board exams next month. Exams are likely to begin in mid-February, following the usual academic calendar. The board has asked schools to complete practical exams and internal assessments before the theory exams start. Students can expect the same exam pattern as last year, with no major changes to marking schemes. Sample papers for major subjects are already available on the CBSE website. Officials advised students to begin revision early and rely only on official study material for accurate preparation.",
+   source:"cbse.gov.in", link:"#"},
+  {cat:"govt", tag:"Govt Jobs", color:"#D9542A",
+   headline:"Railway RRB announces group D recruitment for 2027",
+   summary:"The Railway Recruitment Board has announced a new recruitment drive for Group D posts, opening thousands of vacancies across zones. The role covers track maintenance, technical support, and station operations. Candidates who have passed Class 10 are eligible to apply, with relaxed age limits for reserved categories. The selection process includes a computer-based test, physical efficiency test, and document verification. This is the first Group D drive in three years, and officials expect a high number of applicants. The application portal will open next month, and candidates are advised to keep documents ready in advance.",
+   source:"rrbcdg.gov.in", link:"#"},
+];
+
+const API_BASE = "https://YOUR-API-NAME.onrender.com"; // <-- set this to your deployed Render URL
+
+const CARDS_FROM_PIPELINE_KEY = {
+  competitive_exams: "exams",
+  govt_jobs: "govt",
+  private_jobs: "private",
+  courses: "courses",
+};
+
+const CARDS = [...SAMPLE_CARDS];
+
+const tabsEl = document.getElementById('tabs');
+const feedEl = document.getElementById('feed');
+const progressEl = document.getElementById('progress');
+const toastEl = document.getElementById('toast');
+const pullIndicator = document.getElementById('pullIndicator');
+let activeCat = "all";
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'), 1800);
+}
+
+function mapApiCards(raw){
+  return raw.map(item=>{
+    const catKey = CARDS_FROM_PIPELINE_KEY[item.category] || item.category || "exams";
+    return {
+      cat: catKey,
+      tag: CATS[catKey] ? CATS[catKey].label : "News",
+      color: (CATS[catKey] && CATS[catKey].color) || "#5B5F97",
+      headline: item.headline,
+      summary: item.summary,
+      source: (item.source_link || "").replace(/^https?:\/\//,'').split('/')[0],
+      link: item.source_link || "#",
+    };
+  });
+}
+
+// --- Live fetch on load (real-time mode) --------------------------------
+// Works when this page is hosted outside claude.ai (e.g. Vercel/Netlify),
+// where it's free to call your own API. Falls back to sample cards if
+// the API isn't reachable yet (e.g. API_BASE not set, or offline).
+async function loadLive(){
+  if(API_BASE.includes("YOUR-API-NAME")){
+    return; // not configured yet — stay on sample data, no error noise
+  }
+  try{
+    const res = await fetch(`${API_BASE}/api/news?limit=50`);
+    if(!res.ok) throw new Error(`API returned ${res.status}`);
+    const raw = await res.json();
+    const mapped = mapApiCards(raw);
+    if(mapped.length){
+      CARDS.length = 0;
+      CARDS.push(...mapped);
+      render();
+      showToast(`Live: ${mapped.length} stories loaded`);
+    }
+  }catch(err){
+    showToast("Couldn't reach the live API — showing sample stories");
+  }
+}
+
+// --- Load real pipeline output (news_cards.json) -----------------------
+document.getElementById('loadBtn').addEventListener('click', ()=>{
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    try{
+      const raw = JSON.parse(evt.target.result);
+      const mapped = mapApiCards(raw);
+      CARDS.length = 0;
+      CARDS.push(...mapped);
+      activeCat = "all";
+      render();
+      showToast(`Loaded ${mapped.length} stories from file`);
+    }catch(err){
+      showToast("Couldn't read that file — check it's valid JSON");
+    }
+  };
+  reader.readAsText(file);
+});
+
+// --- Pull-to-refresh -----------------------------------------------------
+let touchStartY = null;
+let pulling = false;
+
+feedEl.addEventListener('touchstart', (e)=>{
+  if(feedEl.scrollTop <= 0){ touchStartY = e.touches[0].clientY; }
+}, {passive:true});
+
+feedEl.addEventListener('touchmove', (e)=>{
+  if(touchStartY === null) return;
+  const delta = e.touches[0].clientY - touchStartY;
+  if(delta > 60 && feedEl.scrollTop <= 0){
+    pulling = true;
+    pullIndicator.classList.add('show');
+  }
+}, {passive:true});
+
+feedEl.addEventListener('touchend', ()=>{
+  if(pulling){
+    pullIndicator.textContent = "Refreshing...";
+    setTimeout(async ()=>{
+      await loadLive();
+      render();
+      pullIndicator.classList.remove('show');
+      pullIndicator.textContent = "Release to refresh";
+      showToast("Feed refreshed");
+    }, 500);
+  }
+  touchStartY = null;
+  pulling = false;
+}, {passive:true});
+
+function render(){
+  tabsEl.innerHTML = Object.entries(CATS).map(([key,c])=>
+    `<button class="tab ${key===activeCat?'active':''}" data-cat="${key}">${c.label}</button>`
+  ).join('');
+
+  const visible = activeCat==="all" ? CARDS : CARDS.filter(c=>c.cat===activeCat);
+
+  progressEl.innerHTML = visible.map(()=>`<span><i></i></span>`).join('');
+
+  feedEl.innerHTML = visible.map(c=>`
+    <article class="card">
+      <div class="thumb" style="background:${c.color}"><span class="tag">${c.tag}</span></div>
+      <h2 class="headline">${c.headline}</h2>
+      <p class="summary">${c.summary}</p>
+      <div class="meta-row">
+        <span>${c.source}</span>
+        <a class="source-link" href="${c.link}" target="_blank" rel="noopener">Read full story</a>
+      </div>
+    </article>
+  `).join('');
+
+  bindScroll(visible.length);
+}
+
+function bindScroll(count){
+  const cards = [...feedEl.querySelectorAll('.card')];
+  const bars = [...progressEl.querySelectorAll('span')];
+  const obs = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      const idx = cards.indexOf(e.target);
+      if(e.isIntersecting && idx>-1) bars[idx].classList.add('seen');
+    });
+  }, {root:feedEl, threshold:0.6});
+  cards.forEach(c=>obs.observe(c));
+}
+
+tabsEl.addEventListener('click', e=>{
+  const btn = e.target.closest('.tab');
+  if(!btn) return;
+  activeCat = btn.dataset.cat;
+  render();
+});
+
+render();
+loadLive();
+</script>
+</body>
+</html>
