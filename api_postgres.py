@@ -23,7 +23,7 @@ RUN:
 
 The table is created automatically on startup, using schema_postgres.sql.
 """
-
+from datetime import datetime
 import os
 from contextlib import contextmanager
 from typing import Optional, List
@@ -93,7 +93,7 @@ class NewsCardOut(NewsCardIn):
     id: int
     source_domain: Optional[str] = None
     status: str
-    created_at: str
+    created_at: datetime
 
 
 class NewsCardEdit(BaseModel):
