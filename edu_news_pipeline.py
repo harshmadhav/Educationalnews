@@ -138,22 +138,42 @@ def deduplicate_articles(articles):
 # 4. THUMBNAIL — try to pull og:image from the article page
 # ---------------------------------------------------------------------
 
-def get_thumbnail(url, timeout=5):
+def get_thumbnail(url, timeout=8):
     if url.lower().endswith(".pdf"):
         return None  # PDFs never have a preview photo — skip the request
-    if "news.google.com" in url:
-        # Google News links are redirect pages, not the real article —
-        # scraping og:image here is unreliable (sometimes returns
-        # Google's own logo instead of a real photo). Skip it and use
-        # the category illustration instead until this resolves the
-        # actual publisher URL first.
-        return None
+
+    # Google-branding assets to reject even if found — these show up
+    # when a redirect lands on a Google interstitial instead of the
+    # real article, and we'd rather show no photo than a wrong one.
+    BAD_IMAGE_HOSTS = ("gstatic.com", "www.google.com/images")
+
     try:
-        resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+        resp = requests.get(url, timeout=timeout,
+                             headers={"User-Agent": "Mozilla/5.0"},
+                             allow_redirects=True)
+        final_url = resp.url
+
+        if "news.google.com" in final_url:
+            # Still on Google's own page after following redirects —
+            # it didn't resolve to the real article. Nothing reliable
+            # to scrape here.
+            return None
+
         soup = BeautifulSoup(resp.text, "html.parser")
-        tag = soup.find("meta", property="og:image")
-        if tag and tag.get("content"):
-            return tag["content"]
+
+        # Prefer the highest-quality image available: check secure_url
+        # first (often a larger/CDN version), then the standard og:image,
+        # then Twitter's card image as a last resort.
+        candidates = []
+        for prop in ("og:image:secure_url", "og:image", "twitter:image"):
+            tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+            if tag and tag.get("content"):
+                candidates.append(tag["content"])
+
+        for image_url in candidates:
+            if not any(bad in image_url for bad in BAD_IMAGE_HOSTS):
+                return image_url
+
     except Exception:
         pass
     return None  # frontend falls back to the category's vector illustration

@@ -52,6 +52,12 @@
   }
   .thumb-art{ position:absolute; inset:0; width:100%; height:100%; }
   .thumb-photo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .thumb-url-input{
+    width:100%; font-size:.78rem; color:var(--meta); background:transparent;
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:14px;
+    font-family:'Inter',sans-serif;
+  }
+  .thumb-url-input:focus{ border-color:var(--ink); outline:none; color:var(--ink); }
   .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;}
   .tag{ font-size:.72rem; font-weight:600; color:var(--meta); text-transform:none; }
   .headline{
@@ -188,7 +194,9 @@ function render(cards){
       : thumbArt(c.category);
     return `
     <div class="card" data-id="${c.id}">
-      <div class="thumb" style="background:${color}">${thumbInner}</div>
+      <div class="thumb" style="background:${color}" data-thumb-preview>${thumbInner}</div>
+      <input class="thumb-url-input" data-field="thumbnail_url" placeholder="Paste an image URL to override the thumbnail"
+             value="${escapeAttr(c.thumbnail_url || '')}">
       <div class="card-top">
         <span class="tag">${c.category} · ${c.source_domain || ''}</span>
       </div>
@@ -203,6 +211,20 @@ function render(cards){
     </div>
   `;
   }).join('');
+
+  // Live-preview the thumbnail as the URL field is edited, so you can
+  // see the change before saving.
+  listEl.querySelectorAll('.thumb-url-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const cardEl = input.closest('.card');
+      const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
+      const preview = cardEl.querySelector('[data-thumb-preview]');
+      const url = input.value.trim();
+      preview.innerHTML = url
+        ? `<img src="${url}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(category).replace(/'/g,"&#39;").replace(/\n/g,'')}'">`
+        : thumbArt(category);
+    });
+  });
 }
 
 function escapeAttr(s){
@@ -231,10 +253,11 @@ listEl.addEventListener('click', async (e)=>{
     } else if(action === 'save'){
       const headline = cardEl.querySelector('[data-field=headline]').value;
       const summary = cardEl.querySelector('[data-field=summary]').value;
+      const thumbnail_url = cardEl.querySelector('[data-field=thumbnail_url]').value.trim() || null;
       await fetch(`${API_BASE}/api/admin/news/${id}`, {
         method:'PATCH',
         headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
-        body: JSON.stringify({ headline, summary })
+        body: JSON.stringify({ headline, summary, thumbnail_url })
       });
     }
   }catch(err){
