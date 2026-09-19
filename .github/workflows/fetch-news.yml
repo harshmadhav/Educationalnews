@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install feedparser requests anthropic beautifulsoup4
+          pip install feedparser requests anthropic beautifulsoup4 pdfplumber
 
       - name: Run the pipeline
         env:
