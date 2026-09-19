@@ -30,6 +30,13 @@
   }
   h1{ font-family:'Source Serif 4',serif; font-size:1.25rem; margin:0; }
   .token-row{ display:flex; gap:8px; align-items:center; }
+  .status-tabs{ display:flex; gap:6px; margin-top:12px; }
+  .status-tab{
+    font-size:.82rem; font-weight:600; padding:6px 14px; border-radius:16px;
+    border:1px solid var(--line); background:transparent; color:var(--ink); cursor:pointer;
+    font-family:inherit;
+  }
+  .status-tab.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
   input[type=password], input[type=text]{
     font-family:inherit; font-size:.85rem; padding:7px 10px; border-radius:8px;
     border:1px solid var(--line); background:var(--paper-dim); color:var(--ink); width:200px;
@@ -58,6 +65,9 @@
     font-family:'Inter',sans-serif;
   }
   .thumb-url-input:focus{ border-color:var(--ink); outline:none; color:var(--ink); }
+  .thumb-tools{ display:flex; gap:14px; margin-bottom:14px; }
+  .thumb-tools .btn-text{ font-size:.76rem; padding:0; }
+  .upload-label{ cursor:pointer; }
   .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;}
   .tag{ font-size:.72rem; font-weight:600; color:var(--meta); text-transform:none; }
   .subcat-select{
@@ -80,6 +90,57 @@
   .meta a:hover{ color:var(--ink); }
   .actions{ display:flex; gap:8px; flex-wrap:wrap; }
   .empty{ text-align:center; color:var(--meta); padding:60px 20px; font-size:.95rem; }
+
+  /* --- Compose modal --- */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(20,33,61,.5);
+    z-index:50; align-items:flex-start; justify-content:center; overflow-y:auto; padding:30px 16px;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:var(--paper); width:100%; max-width:520px; border-radius:14px;
+    padding:22px; box-sizing:border-box;
+  }
+  .modal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .modal-header h2{ font-size:1.15rem; margin:0; }
+  .modal-close{
+    background:none; border:none; font-size:1.4rem; line-height:1; cursor:pointer;
+    color:var(--meta); padding:0 4px;
+  }
+  .form-label{
+    display:block; font-size:.8rem; font-weight:600; color:var(--ink);
+    margin:14px 0 6px;
+  }
+  .form-hint{ font-weight:400; color:var(--meta); }
+  .form-input, .form-textarea{
+    width:100%; font-size:.9rem; color:var(--ink); background:var(--paper-dim);
+    border:1px solid var(--line); border-radius:8px; padding:9px 10px;
+    box-sizing:border-box; font-family:inherit;
+  }
+  .form-textarea{ min-height:130px; resize:vertical; line-height:1.5; }
+  .compose-thumb-preview{
+    height:0; overflow:hidden; border-radius:8px; margin-bottom:0; transition:height .15s;
+  }
+  .compose-thumb-preview:has(img){ height:140px; margin-bottom:8px; }
+  .compose-thumb-preview img{ width:100%; height:100%; object-fit:cover; border-radius:8px; }
+  .sponsor-toggle-row{ margin-top:16px; }
+  .sponsor-checkbox-label{
+    display:flex; align-items:center; gap:8px; font-size:.85rem; color:var(--ink); cursor:pointer;
+  }
+  .advertiser-fields{ margin-top:2px; }
+  .form-input:focus, .form-textarea:focus{ outline:none; border-color:var(--ink); background:var(--paper); }
+  .modal-footer{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:18px; padding-top:14px; border-top:1px solid var(--line);
+  }
+  .btn-text{
+    background:none; border:none; color:var(--meta); font-size:.85rem;
+    cursor:pointer; font-family:inherit; text-decoration:underline;
+  }
+  .btn-primary{
+    background:var(--ink); color:var(--paper); border:none; border-radius:20px;
+    padding:9px 22px; font-size:.9rem; font-weight:600; cursor:pointer; font-family:inherit;
+  }
 </style>
 </head>
 <body>
@@ -90,8 +151,69 @@
     <input type="text" id="apiBase" placeholder="API base URL">
     <input type="password" id="tokenInput" placeholder="Admin token">
     <button class="btn primary" id="loadBtn">Load</button>
+    <button class="btn" id="composeBtn">Write News</button>
+  </div>
+  <div class="status-tabs" id="statusTabs">
+    <button class="status-tab active" data-status="draft">Draft</button>
+    <button class="status-tab" data-status="published">Published</button>
+    <button class="status-tab" data-status="archived">Archived</button>
   </div>
 </header>
+
+<div class="modal-overlay" id="composeModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Write a new story</h2>
+      <button class="modal-close" id="closeCompose" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label class="form-label">Headline</label>
+      <input type="text" id="composeHeadline" class="form-input" placeholder="Short, clear headline">
+
+      <label class="form-label">Content <span id="composeWordCount">(0 words — aim for ~100)</span></label>
+      <textarea id="composeContent" class="form-textarea" placeholder="Write the story here, simple and factual"></textarea>
+
+      <label class="form-label">Category</label>
+      <select id="composeCategory" class="form-input">
+        <option value="competitive_exams">Exam</option>
+        <option value="govt_jobs">Govt Job</option>
+        <option value="private_jobs">Pvt Job</option>
+        <option value="courses">Course</option>
+      </select>
+
+      <label class="form-label">Sub-interest tag</label>
+      <select id="composeSubcategory" class="form-input"></select>
+
+      <label class="form-label">Article or video link <span class="form-hint">(the source readers will open)</span></label>
+      <input type="text" id="composeLink" class="form-input" placeholder="https://...">
+
+      <label class="form-label">Thumbnail <span class="form-hint">(optional — leave blank to use the category icon)</span></label>
+      <div class="compose-thumb-preview" id="composeThumbPreview"></div>
+      <input type="text" id="composeThumbnail" class="form-input" placeholder="Paste an image URL...">
+      <div class="thumb-tools">
+        <label class="btn-text upload-label">Upload photo
+          <input type="file" accept="image/*" id="composeFileInput" hidden>
+        </label>
+        <button class="btn-text" type="button" id="composeYtFetchBtn">Fetch thumbnail from video link</button>
+      </div>
+
+      <div class="sponsor-toggle-row">
+        <label class="sponsor-checkbox-label">
+          <input type="checkbox" id="composeSponsored">
+          This is a sponsored / affiliate post
+        </label>
+      </div>
+      <div id="advertiserFields" class="advertiser-fields" style="display:none">
+        <label class="form-label">Advertiser / brand name <span class="form-hint">(shown next to the "Ad" label)</span></label>
+        <input type="text" id="composeAdvertiser" class="form-input" placeholder="e.g. upGrad">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-text" id="saveDraftBtn">Save as draft</button>
+      <button class="btn-primary" id="publishNowBtn">Publish now</button>
+    </div>
+  </div>
+</div>
 
 <main>
   <p class="count" id="count"></p>
@@ -194,6 +316,17 @@ document.getElementById('tokenInput').value = localStorage.getItem('sb_token') |
 
 document.getElementById('loadBtn').addEventListener('click', loadQueue);
 
+document.getElementById('statusTabs').addEventListener('click', (e)=>{
+  const tab = e.target.closest('.status-tab');
+  if(!tab) return;
+  document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentStatus = tab.dataset.status;
+  loadQueue();
+});
+
+let currentStatus = 'draft';
+
 async function loadQueue(){
   API_BASE = document.getElementById('apiBase').value.trim().replace(/\/$/,'');
   TOKEN = document.getElementById('tokenInput').value.trim();
@@ -207,7 +340,7 @@ async function loadQueue(){
 
   listEl.innerHTML = `<p class="empty">Loading…</p>`;
   try{
-    const res = await fetch(`${API_BASE}/api/admin/news?status=draft&limit=100`, {
+    const res = await fetch(`${API_BASE}/api/admin/news?status=${currentStatus}&limit=100`, {
       headers: { "X-Admin-Token": TOKEN }
     });
     if(res.status === 401){
@@ -222,11 +355,18 @@ async function loadQueue(){
   }
 }
 
+function statusCountLabel(n){
+  const noun = currentStatus === 'draft' ? 'awaiting review'
+             : currentStatus === 'published' ? 'live in the app'
+             : 'archived';
+  return `${n} story/stories ${noun}`;
+}
+
 function render(cards){
-  countEl.textContent = `${cards.length} story/stories awaiting review`;
+  countEl.textContent = statusCountLabel(cards.length);
 
   if(cards.length === 0){
-    listEl.innerHTML = `<p class="empty">Nothing waiting for review right now.</p>`;
+    listEl.innerHTML = `<p class="empty">Nothing here right now.</p>`;
     return;
   }
 
@@ -240,6 +380,12 @@ function render(cards){
       <div class="thumb" style="background:${color}" data-thumb-preview>${thumbInner}</div>
       <input class="thumb-url-input" data-field="thumbnail_url" placeholder="Paste an image URL to override the thumbnail"
              value="${escapeAttr(c.thumbnail_url || '')}">
+      <div class="thumb-tools">
+        <label class="btn-text upload-label">Upload photo
+          <input type="file" accept="image/*" class="thumb-file-input" hidden>
+        </label>
+        <button class="btn-text yt-fetch-btn" type="button">Fetch thumbnail from video link</button>
+      </div>
       <div class="card-top">
         <span class="tag">${c.category} · ${c.source_domain || ''}</span>
       </div>
@@ -253,8 +399,14 @@ function render(cards){
       <textarea data-field="summary">${c.summary}</textarea>
       <p class="meta"><a href="${c.source_link}" target="_blank" rel="noopener">View original source ↗</a></p>
       <div class="actions">
-        <button class="btn approve" data-action="approve">Approve</button>
-        <button class="btn reject" data-action="reject">Reject</button>
+        ${currentStatus === 'draft' ? `
+          <button class="btn approve" data-action="approve">Approve</button>
+          <button class="btn reject" data-action="reject">Reject</button>
+        ` : currentStatus === 'published' ? `
+          <button class="btn reject" data-action="unpublish">Unpublish</button>
+        ` : `
+          <button class="btn approve" data-action="unpublish">Restore to draft</button>
+        `}
         <button class="btn" data-action="save">Save edits</button>
       </div>
     </div>
@@ -263,21 +415,90 @@ function render(cards){
 
   // Live-preview the thumbnail as the URL field is edited, so you can
   // see the change before saving.
+  function refreshThumbPreview(cardEl, category, url){
+    const preview = cardEl.querySelector('[data-thumb-preview]');
+    preview.innerHTML = url
+      ? `<img src="${url}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(category).replace(/'/g,"&#39;").replace(/\n/g,'')}'">`
+      : thumbArt(category);
+  }
+
   listEl.querySelectorAll('.thumb-url-input').forEach(input => {
     input.addEventListener('input', () => {
       const cardEl = input.closest('.card');
       const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
-      const preview = cardEl.querySelector('[data-thumb-preview]');
-      const url = input.value.trim();
-      preview.innerHTML = url
-        ? `<img src="${url}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(category).replace(/'/g,"&#39;").replace(/\n/g,'')}'">`
-        : thumbArt(category);
+      refreshThumbPreview(cardEl, category, input.value.trim());
+    });
+  });
+
+  listEl.querySelectorAll('.thumb-file-input').forEach(fileInput => {
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      const cardEl = fileInput.closest('.card');
+      const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
+      const urlInput = cardEl.querySelector('.thumb-url-input');
+      try{
+        const dataUrl = await resizeImageFile(file);
+        urlInput.value = dataUrl;
+        refreshThumbPreview(cardEl, category, dataUrl);
+      }catch(err){
+        alert("Couldn't process that image — try a different file.");
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.yt-fetch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cardEl = btn.closest('.card');
+      const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
+      const urlInput = cardEl.querySelector('.thumb-url-input');
+      const sourceLink = cardEl.querySelector('.meta a').href;
+      const ytThumb = getYouTubeThumbnail(sourceLink);
+      if(!ytThumb){
+        alert("That story's source link doesn't look like a YouTube video.");
+        return;
+      }
+      urlInput.value = ytThumb;
+      refreshThumbPreview(cardEl, category, ytThumb);
     });
   });
 }
 
 function escapeAttr(s){
   return (s || "").replace(/"/g, "&quot;");
+}
+
+// Resizes/compresses an uploaded image to keep it small enough to store
+// as a data URI directly in the database — no separate file storage
+// needed. Targets ~1200px wide, JPEG at 75% quality.
+function resizeImageFile(file, maxWidth=1200, maxHeight=675, quality=0.75){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Extracts a YouTube video ID from common URL formats and returns
+// YouTube's own hosted thumbnail for it, or null if not a YouTube link.
+function getYouTubeThumbnail(url){
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/);
+  return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
 }
 
 listEl.addEventListener('click', async (e)=>{
@@ -299,6 +520,12 @@ listEl.addEventListener('click', async (e)=>{
         method:'POST', headers:{ "X-Admin-Token": TOKEN }
       });
       cardEl.remove();
+    } else if(action === 'unpublish'){
+      await fetch(`${API_BASE}/api/admin/news/${id}/unpublish`, {
+        method:'POST', headers:{ "X-Admin-Token": TOKEN }
+      });
+      cardEl.remove();
+      alert("Moved back to Draft — edit it there, then Approve to republish.");
     } else if(action === 'save'){
       const headline = cardEl.querySelector('[data-field=headline]').value;
       const summary = cardEl.querySelector('[data-field=summary]').value;
@@ -316,8 +543,145 @@ listEl.addEventListener('click', async (e)=>{
   btn.disabled = false;
 
   const remaining = listEl.querySelectorAll('.card').length;
-  countEl.textContent = `${remaining} story/stories awaiting review`;
+  countEl.textContent = statusCountLabel(remaining);
 });
+
+// --- Write News (compose + publish original stories) ---------------------
+
+function populateComposeSubcategories(){
+  const category = document.getElementById('composeCategory').value;
+  const select = document.getElementById('composeSubcategory');
+  const options = SUBCATEGORY_LABELS[category] || {};
+  select.innerHTML = `<option value="">— No sub-interest tag —</option>` +
+    Object.entries(options).map(([slug,label])=>`<option value="${slug}">${label}</option>`).join('');
+}
+
+document.getElementById('composeCategory').addEventListener('change', populateComposeSubcategories);
+
+document.getElementById('composeContent').addEventListener('input', (e)=>{
+  const words = e.target.value.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('composeWordCount').textContent = `(${words} words — aim for ~100)`;
+});
+
+document.getElementById('composeBtn').addEventListener('click', ()=>{
+  if(!API_BASE || !TOKEN){
+    alert("Enter your API URL and admin token at the top first, then click Load.");
+    return;
+  }
+  populateComposeSubcategories();
+  document.getElementById('composeModal').classList.add('show');
+});
+
+document.getElementById('closeCompose').addEventListener('click', ()=>{
+  document.getElementById('composeModal').classList.remove('show');
+});
+document.getElementById('composeModal').addEventListener('click', (e)=>{
+  if(e.target.id === 'composeModal') document.getElementById('composeModal').classList.remove('show');
+});
+
+function refreshComposePreview(){
+  const url = document.getElementById('composeThumbnail').value.trim();
+  const preview = document.getElementById('composeThumbPreview');
+  preview.innerHTML = url ? `<img src="${url}" alt="" onerror="this.style.display='none'">` : '';
+}
+
+document.getElementById('composeThumbnail').addEventListener('input', refreshComposePreview);
+
+document.getElementById('composeFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const dataUrl = await resizeImageFile(file);
+    document.getElementById('composeThumbnail').value = dataUrl;
+    refreshComposePreview();
+  }catch(err){
+    alert("Couldn't process that image — try a different file.");
+  }
+});
+
+document.getElementById('composeYtFetchBtn').addEventListener('click', () => {
+  const link = document.getElementById('composeLink').value.trim();
+  const ytThumb = getYouTubeThumbnail(link);
+  if(!ytThumb){
+    alert("Enter a YouTube video link above first.");
+    return;
+  }
+  document.getElementById('composeThumbnail').value = ytThumb;
+  refreshComposePreview();
+});
+
+function clearComposeForm(){
+  document.getElementById('composeHeadline').value = '';
+  document.getElementById('composeContent').value = '';
+  document.getElementById('composeWordCount').textContent = '(0 words — aim for ~100)';
+  document.getElementById('composeLink').value = '';
+  document.getElementById('composeThumbnail').value = '';
+  document.getElementById('composeSponsored').checked = false;
+  document.getElementById('composeAdvertiser').value = '';
+  document.getElementById('advertiserFields').style.display = 'none';
+  refreshComposePreview();
+}
+
+document.getElementById('composeSponsored').addEventListener('change', (e)=>{
+  document.getElementById('advertiserFields').style.display = e.target.checked ? 'block' : 'none';
+});
+
+async function submitComposedStory(publishImmediately){
+  const headline = document.getElementById('composeHeadline').value.trim();
+  const summary = document.getElementById('composeContent').value.trim();
+  const category = document.getElementById('composeCategory').value;
+  const subcategory = document.getElementById('composeSubcategory').value || null;
+  const source_link = document.getElementById('composeLink').value.trim();
+  const thumbnail_url = document.getElementById('composeThumbnail').value.trim() || null;
+  const is_sponsored = document.getElementById('composeSponsored').checked;
+  const sponsor_name = is_sponsored
+    ? (document.getElementById('composeAdvertiser').value.trim() || null)
+    : null;
+
+  if(!headline || !summary || !source_link){
+    alert("Headline, content, and the article/video link are all required.");
+    return;
+  }
+  if(is_sponsored && !sponsor_name){
+    alert("Enter the advertiser/brand name for sponsored posts — required for proper disclosure.");
+    return;
+  }
+
+  const btn = publishImmediately
+    ? document.getElementById('publishNowBtn')
+    : document.getElementById('saveDraftBtn');
+  btn.disabled = true;
+
+  try{
+    const createRes = await fetch(`${API_BASE}/api/news`, {
+      method: 'POST',
+      headers: { "X-Admin-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category, subcategory, headline, summary, source_link, thumbnail_url,
+        is_original: !is_sponsored, is_sponsored, sponsor_name,
+      }),
+    });
+    if(!createRes.ok) throw new Error(`Server returned ${createRes.status}`);
+    const created = await createRes.json();
+
+    if(publishImmediately){
+      await fetch(`${API_BASE}/api/admin/news/${created.id}/approve`, {
+        method: 'POST', headers: { "X-Admin-Token": TOKEN },
+      });
+    }
+
+    document.getElementById('composeModal').classList.remove('show');
+    clearComposeForm();
+    alert(publishImmediately ? "Published — it's now live in the app." : "Saved as a draft in your review queue.");
+    if(!publishImmediately) loadQueue(); // refresh so the new draft shows up
+  }catch(err){
+    alert(`Couldn't save the story: ${err.message}`);
+  }
+  btn.disabled = false;
+}
+
+document.getElementById('saveDraftBtn').addEventListener('click', ()=> submitComposedStory(false));
+document.getElementById('publishNowBtn').addEventListener('click', ()=> submitComposedStory(true));
 </script>
 </body>
 </html>

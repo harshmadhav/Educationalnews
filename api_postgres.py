@@ -89,6 +89,9 @@ class NewsCardIn(BaseModel):
     thumbnail_url: Optional[str] = None
     source_link: str
     published_at: Optional[str] = None
+    is_original: bool = False
+    is_sponsored: bool = False
+    sponsor_name: Optional[str] = None
 
 
 class NewsCardOut(NewsCardIn):
@@ -175,12 +178,14 @@ def add_news_item(card: NewsCardIn):
                     """
                     INSERT INTO news_cards
                         (category, subcategory, headline, summary, thumbnail_url,
-                         source_link, source_domain, published_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                         source_link, source_domain, published_at, is_original,
+                         is_sponsored, sponsor_name)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (card.category, card.subcategory, card.headline, card.summary,
                      card.thumbnail_url, card.source_link, domain,
-                     card.published_at),
+                     card.published_at, card.is_original, card.is_sponsored,
+                     card.sponsor_name),
                 )
                 conn.commit()
             except pg_errors.UniqueViolation:
@@ -267,6 +272,24 @@ def approve_card(card_id: int):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 "UPDATE news_cards SET status = 'published' WHERE id = %s RETURNING *",
+                (card_id,),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            if not row:
+                raise HTTPException(status_code=404, detail="Not found")
+            return row
+
+
+@app.post("/api/admin/news/{card_id}/unpublish", response_model=NewsCardOut,
+          dependencies=[Depends(verify_admin)])
+def unpublish_card(card_id: int):
+    """Pulls a live card back to draft so it stops showing in the app
+    while you edit it. Re-approve it afterward to publish the update."""
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "UPDATE news_cards SET status = 'draft' WHERE id = %s RETURNING *",
                 (card_id,),
             )
             row = cur.fetchone()

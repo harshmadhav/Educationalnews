@@ -140,6 +140,12 @@
   }
   .icon-btn:hover{ background:rgba(0,0,0,.46); }
   .icon-btn.active{ color:var(--amber); }
+  .play-overlay{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:52px; height:52px; border-radius:50%; background:rgba(20,33,61,.55);
+    display:flex; align-items:center; justify-content:center; backdrop-filter:blur(1px);
+  }
+  .play-overlay svg{ margin-left:3px; } /* optical centering for the play triangle */
   .empty-saved{
     padding:60px 24px; text-align:center; color:var(--meta); font-size:.95rem;
     max-width:400px; margin:0 auto;
@@ -147,6 +153,15 @@
   .cat-label{
     font-size:.72rem; font-weight:600; color:var(--meta); text-transform:uppercase;
     letter-spacing:.6px; margin:0 0 8px;
+  }
+  .original-badge{
+    background:var(--amber); color:var(--ink); padding:2px 8px; border-radius:10px;
+    font-size:.68rem; letter-spacing:.3px; margin-left:6px; text-transform:none;
+  }
+  .ad-badge{
+    background:transparent; color:var(--coral); border:1px solid var(--coral);
+    padding:2px 8px; border-radius:10px; font-size:.68rem; font-weight:700;
+    letter-spacing:.3px; margin-left:6px; text-transform:none;
   }
   .headline{
     font-family:'Source Serif 4',serif; font-weight:700; font-size:1.32rem;
@@ -300,6 +315,10 @@ function dateLabel(c){
   const added = formatPublished(c.addedOn);
   if(added) return 'Added ' + added + ' · ';
   return '';
+}
+
+function isVideoLink(url){
+  return /youtube\.com|youtu\.be|vimeo\.com/i.test(url || '');
 }
 
 const API_BASE = "https://educationalnews.onrender.com"; // <-- your live Render API
@@ -460,6 +479,9 @@ function mapApiCards(raw){
       photo: item.thumbnail_url || null,
       published: item.published_at || null,
       addedOn: item.created_at || null,
+      isOriginal: !!item.is_original,
+      isSponsored: !!item.is_sponsored,
+      sponsorName: item.sponsor_name || null,
     };
   });
 }
@@ -590,6 +612,7 @@ function render(){
     <article class="card">
       <div class="thumb" style="background:${c.color}">
         ${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}
+        ${isVideoLink(c.link) ? `<div class="play-overlay"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M8 5v14l11-7z" fill="#fff"/></svg></div>` : ''}
         <div class="thumb-actions">
           <button class="icon-btn ${isSaved?'active':''}" data-action="bookmark" data-id="${c.id}" aria-label="Save">
             <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" fill="${isSaved?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
@@ -599,7 +622,7 @@ function render(){
           </button>
         </div>
       </div>
-      <p class="cat-label">${c.tag}</p>
+      <p class="cat-label">${c.tag}${c.isSponsored ? `<span class="ad-badge">Ad${c.sponsorName ? ' · '+c.sponsorName : ''}</span>` : (c.isOriginal ? ' <span class="original-badge">Original</span>' : '')}</p>
       <h2 class="headline">${c.headline}</h2>
       <p class="summary">${c.summary}</p>
       <div class="meta-row">

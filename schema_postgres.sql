@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS news_cards (
     subcategory     TEXT,  -- fine-grained interest tag (e.g. 'engineering_entrance');
                             -- nullable so older rows and edge cases still work
 
+    is_original     BOOLEAN NOT NULL DEFAULT FALSE,  -- true only for stories
+                            -- written directly in the app (not scraped)
+
+    is_sponsored    BOOLEAN NOT NULL DEFAULT FALSE,  -- true for affiliate/ad
+                            -- cards — must always render with a visible
+                            -- "Ad" label per advertising disclosure rules
+    sponsor_name    TEXT,   -- brand/advertiser name shown next to "Ad"
+
     headline        TEXT NOT NULL,
     summary         TEXT NOT NULL,          -- AI-rewritten, ~100 words
 
@@ -53,6 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_news_source_link
 -- Migration for databases created before subcategory existed — safe to
 -- run every startup, does nothing once the column is already there.
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS subcategory TEXT;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS is_original BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS is_sponsored BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS sponsor_name TEXT;
 
 -- Fast filtering by subcategory (the "Customize" feature's main query)
 CREATE INDEX IF NOT EXISTS idx_news_subcategory
