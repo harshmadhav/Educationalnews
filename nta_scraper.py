@@ -99,6 +99,42 @@ def find_notice_links(listing_url=NTA_NOTICES_URL, limit=10):
     return notices
 
 
+def extract_notice_date(text):
+    """
+    NTA notices usually print their date somewhere near the top —
+    e.g. "Dated: 15.09.2026", "15/09/2026", or "15th September, 2026".
+    Scans the first part of the extracted text and returns an ISO
+    date string (YYYY-MM-DDT00:00:00Z) if found, else None.
+    """
+    MONTHS = {
+        "january": 1, "february": 2, "march": 3, "april": 4, "may": 5,
+        "june": 6, "july": 7, "august": 8, "september": 9,
+        "october": 10, "november": 11, "december": 12,
+    }
+    search_area = text[:600]  # the date is almost always near the start
+
+    # Pattern 1: numeric dd.mm.yyyy / dd-mm-yyyy / dd/mm/yyyy
+    match = re.search(r"\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b", search_area)
+    if match:
+        day, month, year = (int(g) for g in match.groups())
+        if 1 <= day <= 31 and 1 <= month <= 12 and 2000 <= year <= 2100:
+            return f"{year:04d}-{month:02d}-{day:02d}T00:00:00Z"
+
+    # Pattern 2: "15th September, 2026" or "15 September 2026"
+    match = re.search(
+        r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|"
+        r"July|August|September|October|November|December)[,]?\s+(\d{4})\b",
+        search_area, re.IGNORECASE,
+    )
+    if match:
+        day = int(match.group(1))
+        month = MONTHS[match.group(2).lower()]
+        year = int(match.group(3))
+        return f"{year:04d}-{month:02d}-{day:02d}T00:00:00Z"
+
+    return None
+
+
 def extract_pdf_text(pdf_url, max_chars=3000):
     """Downloads a PDF and pulls out its text (first few pages only —
     enough context for the AI to summarize, without wasting tokens)."""
@@ -174,8 +210,10 @@ def _pdfs_to_articles(notices, category):
                 "title": notice["title"],
                 "link": notice["pdf_url"],
                 "raw_summary": pdf_text,
-                "published": "",  # these notice boards rarely give a clean
-                                   # machine-readable date; left blank
+                "published": extract_notice_date(pdf_text) or "",  # from
+                                   # the PDF itself when found; otherwise
+                                   # left blank (the app falls back to
+                                   # "Added on" using its own timestamp)
             })
         except Exception as e:
             print(f"  Skipped notice '{notice['title']}': {e}")

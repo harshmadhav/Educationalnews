@@ -80,10 +80,9 @@
   .thumb-photo{
     position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
   }
-  .tag{
-    position:relative; z-index:1;
-    font-size:.72rem; font-weight:600; color:#fff; background:rgba(0,0,0,.28);
-    padding:4px 10px; border-radius:14px; letter-spacing:.2px;
+  .cat-label{
+    font-size:.72rem; font-weight:600; color:var(--meta); text-transform:uppercase;
+    letter-spacing:.6px; margin:0 0 8px;
   }
   .headline{
     font-family:'Source Serif 4',serif; font-weight:700; font-size:1.32rem;
@@ -94,9 +93,10 @@
     margin:0 0 16px; max-width:64ch;
   }
   .meta-row{
-    display:flex; align-items:center; justify-content:space-between;
-    margin-top:auto; font-size:.82rem; color:var(--meta);
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin-top:auto; font-size:.8rem; color:var(--meta);
   }
+  .meta-left{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .source-link{
     color:var(--ink); font-weight:600; text-decoration:none;
     border-bottom:1.5px solid var(--amber); padding-bottom:1px;
@@ -129,37 +129,37 @@
 <script>
 const CATS = {
   all: {label:"All"},
-  exams: {label:"Exams", color:"#1F7A70"},
-  govt: {label:"Govt Jobs", color:"#D9542A"},
-  private: {label:"Private Jobs", color:"#5B5F97"},
-  courses: {label:"Courses", color:"#F2A93B"},
+  exams: {label:"Exam", color:"#1F7A70"},
+  govt: {label:"Govt Job", color:"#D9542A"},
+  private: {label:"Pvt Job", color:"#5B5F97"},
+  courses: {label:"Course", color:"#F2A93B"},
 };
 
 const SAMPLE_CARDS = [
-  {cat:"exams", tag:"Exams", color:"#1F7A70",
+  {cat:"exams", tag:"Exam", color:"#1F7A70",
    headline:"UGC NET December session dates released",
    summary:"The University Grants Commission has announced exam dates for the December cycle of UGC NET. Candidates can apply through the official portal starting next week. The exam covers over 80 subjects and is used for junior research fellowships and assistant professor eligibility. Officials confirmed the exam pattern remains unchanged this cycle, with two papers on the same day. Admit cards will be issued two weeks before the exam date. Students are advised to check their category-wise eligibility criteria on the official website before applying, as late corrections will not be accepted after the form closes.",
-   source:"ugcnet.nta.nic.in", link:"#"},
-  {cat:"govt", tag:"Govt Jobs", color:"#D9542A",
+   source:"ugcnet.nta.nic.in", link:"#", published:"2026-09-15T09:00:00Z"},
+  {cat:"govt", tag:"Govt Job", color:"#D9542A",
    headline:"SSC opens 12,000 posts for Combined Graduate Level exam",
    summary:"The Staff Selection Commission has opened applications for over 12,000 posts under the Combined Graduate Level recruitment. Vacancies span ministries including finance, home affairs, and railways. Graduates from any stream can apply, with age limits varying by post. The selection process includes two computer-based tests followed by a skill or document verification round. The application window stays open for three weeks, and the commission has waived the usual fee for female and reserved-category candidates. A detailed post-wise breakdown will be published closer to the exam date on the official recruitment page.",
-   source:"ssc.nic.in", link:"#"},
-  {cat:"courses", tag:"Courses", color:"#F2A93B",
+   source:"ssc.nic.in", link:"#", published:"2026-09-16T11:30:00Z"},
+  {cat:"courses", tag:"Course", color:"#F2A93B",
    headline:"IIM Bangalore launches 6-month data strategy program",
    summary:"IIM Bangalore has introduced a six-month executive program in data strategy for working professionals. The course covers analytics, decision-making, and leadership through a mix of live online sessions and one campus visit. It is aimed at professionals with at least three years of experience in any field. Applications are being accepted on a rolling basis, with the first batch starting in November. The institute said the program includes mentorship from senior faculty and a capstone project based on the learner's own organisation. Fees can be paid in instalments, and limited scholarships are available for eligible candidates.",
-   source:"iimb.ac.in", link:"#"},
-  {cat:"private", tag:"Private Jobs", color:"#5B5F97",
+   source:"iimb.ac.in", link:"#", published:"2026-09-14T14:00:00Z"},
+  {cat:"private", tag:"Pvt Job", color:"#5B5F97",
    headline:"TCS to hire 40,000 freshers this financial year",
    summary:"Tata Consultancy Services has announced plans to hire around 40,000 freshers in the current financial year, mainly from engineering and computer science backgrounds. The hiring will happen through campus drives and the company's national qualifier test. Roles will span software development, cloud services, and cybersecurity. New hires will go through a structured training program before being assigned to project teams. The company said demand from clients in banking and retail sectors is driving the expansion. Interested candidates can register through the official careers page once campus drives are announced for their institution.",
-   source:"tcs.com", link:"#"},
-  {cat:"exams", tag:"Exams", color:"#1F7A70",
+   source:"tcs.com", link:"#", published:"2026-09-17T08:15:00Z"},
+  {cat:"exams", tag:"Exam", color:"#1F7A70",
    headline:"CBSE Class 10, 12 board exam datesheet expected next month",
    summary:"The Central Board of Secondary Education is expected to release the datesheet for Class 10 and 12 board exams next month. Exams are likely to begin in mid-February, following the usual academic calendar. The board has asked schools to complete practical exams and internal assessments before the theory exams start. Students can expect the same exam pattern as last year, with no major changes to marking schemes. Sample papers for major subjects are already available on the CBSE website. Officials advised students to begin revision early and rely only on official study material for accurate preparation.",
-   source:"cbse.gov.in", link:"#"},
-  {cat:"govt", tag:"Govt Jobs", color:"#D9542A",
+   source:"cbse.gov.in", link:"#", published:"2026-09-13T10:00:00Z"},
+  {cat:"govt", tag:"Govt Job", color:"#D9542A",
    headline:"Railway RRB announces group D recruitment for 2027",
    summary:"The Railway Recruitment Board has announced a new recruitment drive for Group D posts, opening thousands of vacancies across zones. The role covers track maintenance, technical support, and station operations. Candidates who have passed Class 10 are eligible to apply, with relaxed age limits for reserved categories. The selection process includes a computer-based test, physical efficiency test, and document verification. This is the first Group D drive in three years, and officials expect a high number of applicants. The application portal will open next month, and candidates are advised to keep documents ready in advance.",
-   source:"rrbcdg.gov.in", link:"#"},
+   source:"rrbcdg.gov.in", link:"#", published:"2026-09-12T06:45:00Z"},
 ];
 
 const THUMB_ART = {
@@ -200,7 +200,26 @@ function thumbArt(catKey){
   return THUMB_ART[catKey] || THUMB_ART.exams;
 }
 
-const API_BASE = "https://YOUR-API-NAME.onrender.com"; // <-- set this to your deployed Render URL
+function formatPublished(pub){
+  if(!pub) return '';
+  const d = new Date(pub);
+  if(isNaN(d.getTime())) return '';
+  const datePart = d.toLocaleDateString(undefined, {day:'numeric', month:'short', year:'numeric'});
+  const timePart = d.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'});
+  return `${datePart}, ${timePart}`;
+}
+
+function dateLabel(c){
+  const pub = formatPublished(c.published);
+  if(pub) return pub + ' · ';
+  // No official publish date from the source (common for notice-board
+  // PDFs) — fall back to when this story was added, labeled honestly.
+  const added = formatPublished(c.addedOn);
+  if(added) return 'Added ' + added + ' · ';
+  return '';
+}
+
+const API_BASE = "https://educationalnews.onrender.com"; // <-- your live Render API
 
 const CARDS_FROM_PIPELINE_KEY = {
   competitive_exams: "exams",
@@ -236,6 +255,8 @@ function mapApiCards(raw){
       source: (item.source_link || "").replace(/^https?:\/\//,'').split('/')[0],
       link: item.source_link || "#",
       photo: item.thumbnail_url || null,
+      published: item.published_at || null,
+      addedOn: item.created_at || null,
     };
   });
 }
@@ -332,12 +353,13 @@ function render(){
 
   feedEl.innerHTML = visible.map(c=>`
     <article class="card">
-      <div class="thumb" style="background:${c.color}">${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}<span class="tag">${c.tag}</span></div>
+      <div class="thumb" style="background:${c.color}">${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}</div>
+      <p class="cat-label">${c.tag}</p>
       <h2 class="headline">${c.headline}</h2>
       <p class="summary">${c.summary}</p>
       <div class="meta-row">
-        <span>${c.source}</span>
-        <a class="source-link" href="${c.link}" target="_blank" rel="noopener">Read full story</a>
+        <span class="meta-left">${dateLabel(c)}${c.source}</span>
+        <a class="source-link" href="${c.link}" target="_blank" rel="noopener">Read More</a>
       </div>
     </article>
   `).join('');
