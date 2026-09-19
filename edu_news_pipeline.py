@@ -183,23 +183,62 @@ def get_thumbnail(url, timeout=8):
 # 5. AI REWRITE — headline + 100-word body, simple professional tone
 # ---------------------------------------------------------------------
 
+# Fine-grained interest tags per category. The AI picks ONE of these per
+# story (from the list matching that story's category) so the app can
+# offer a "Customize" filter within each broad category.
+SUBCATEGORY_OPTIONS = {
+    "competitive_exams": [
+        "engineering_entrance", "medical_entrance", "pg_research",
+        "management_entrance", "law_entrance", "design_entrance",
+        "architecture_entrance", "agriculture_entrance", "hospitality_entrance",
+        "university_entrance", "civil_services_exam", "teaching_eligibility",
+        "school_boards", "state_entrance",
+    ],
+    "courses": [
+        "engineering_course", "medical_course", "it_data_science",
+        "management_course", "commerce_finance", "law_course",
+        "design_arts", "pure_sciences", "humanities", "agriculture_course",
+        "hospitality_course", "teacher_training", "vocational_skills",
+        "online_courses",
+    ],
+    "govt_jobs": [
+        "banking_govt", "railways", "ssc", "defence", "police_paramilitary",
+        "civil_services_job", "state_psc", "teaching_govt", "psu",
+        "judiciary", "postal", "insurance_govt", "healthcare_govt",
+        "municipal",
+    ],
+    "private_jobs": [
+        "it_tech", "banking_finance_pvt", "bpo_kpo", "sales_marketing",
+        "retail_ecommerce", "manufacturing", "startups",
+        "healthcare_pharma", "media_content", "hospitality_pvt",
+        "consulting", "internships",
+    ],
+}
+
 REWRITE_PROMPT = """You are a news editor for a student and job-seeker audience.
 
 Rewrite the following news into:
 1. A short, clear headline (max 12 words)
 2. A summary of exactly around 100 words, in simple professional English
+3. A subcategory tag — pick EXACTLY ONE value from this list that best
+   matches the story: {subcategory_options}
+   If truly nothing fits, use null.
 
 Keep all facts accurate. No opinions. No fluff. Output ONLY valid JSON in
 this exact format, nothing else:
 
-{{"headline": "...", "summary": "..."}}
+{{"headline": "...", "summary": "...", "subcategory": "..."}}
 
 Original title: {title}
 Original content: {content}
 """
 
-def rewrite_with_ai(title, raw_text):
-    prompt = REWRITE_PROMPT.format(title=title, content=raw_text)
+def rewrite_with_ai(title, raw_text, category):
+    options = SUBCATEGORY_OPTIONS.get(category, [])
+    prompt = REWRITE_PROMPT.format(
+        title=title, content=raw_text,
+        subcategory_options=", ".join(options),
+    )
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=400,
@@ -208,10 +247,16 @@ def rewrite_with_ai(title, raw_text):
     text = response.content[0].text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
     try:
-        return json.loads(text)
+        result = json.loads(text)
     except json.JSONDecodeError:
         # fallback: keep original if the model didn't return clean JSON
-        return {"headline": title, "summary": raw_text[:400]}
+        return {"headline": title, "summary": raw_text[:400], "subcategory": None}
+
+    # Guard against a hallucinated tag that isn't in our approved list —
+    # better to leave it untagged than store a made-up category.
+    if result.get("subcategory") not in options:
+        result["subcategory"] = None
+    return result
 
 
 # ---------------------------------------------------------------------
@@ -219,11 +264,12 @@ def rewrite_with_ai(title, raw_text):
 # ---------------------------------------------------------------------
 
 def build_card(article):
-    ai_result = rewrite_with_ai(article["title"], article["raw_summary"])
+    ai_result = rewrite_with_ai(article["title"], article["raw_summary"], article["category"])
     thumbnail = get_thumbnail(article["link"])
 
     return {
         "category": article["category"],
+        "subcategory": ai_result.get("subcategory"),
         "headline": ai_result["headline"],
         "summary": ai_result["summary"],
         "thumbnail_url": thumbnail,
@@ -245,6 +291,7 @@ def push_to_api(cards):
     payload = [
         {
             "category": c["category"],
+            "subcategory": c.get("subcategory"),
             "headline": c["headline"],
             "summary": c["summary"],
             "thumbnail_url": c["thumbnail_url"],

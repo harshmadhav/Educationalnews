@@ -40,6 +40,56 @@
     border:1px solid var(--line); border-radius:16px; padding:6px 12px; cursor:pointer;
     font-family:inherit;
   }
+  .header-actions{ display:flex; gap:8px; align-items:center; }
+
+  /* --- Customize modal --- */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(20,33,61,.5);
+    z-index:50; align-items:flex-end; justify-content:center;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:var(--paper); width:100%; max-width:480px; max-height:82vh;
+    border-radius:16px 16px 0 0; display:flex; flex-direction:column;
+    padding:20px; box-sizing:border-box;
+  }
+  @media (min-width:560px){
+    .modal-overlay{ align-items:center; }
+    .modal{ border-radius:16px; max-height:78vh; }
+  }
+  .modal-header{ display:flex; justify-content:space-between; align-items:center; }
+  .modal-header h2{
+    font-family:'Source Serif 4',serif; font-size:1.15rem; margin:0;
+  }
+  .modal-close{
+    background:none; border:none; font-size:1.4rem; line-height:1; cursor:pointer;
+    color:var(--meta); padding:0 4px;
+  }
+  .modal-sub{ font-size:.85rem; color:var(--meta); margin:8px 0 16px; }
+  .modal-body{ overflow-y:auto; flex:1; }
+  .interest-group{ margin-bottom:18px; }
+  .interest-group h3{
+    font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+    color:var(--meta); margin:0 0 8px;
+  }
+  .interest-chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .interest-chip{
+    font-size:.82rem; padding:6px 12px; border-radius:14px; border:1px solid var(--line);
+    background:transparent; color:var(--ink); cursor:pointer; font-family:inherit;
+  }
+  .interest-chip.selected{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .modal-footer{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
+  }
+  .btn-text{
+    background:none; border:none; color:var(--meta); font-size:.85rem;
+    cursor:pointer; font-family:inherit; text-decoration:underline;
+  }
+  .btn-primary{
+    background:var(--ink); color:var(--paper); border:none; border-radius:20px;
+    padding:9px 22px; font-size:.9rem; font-weight:600; cursor:pointer; font-family:inherit;
+  }
   .pull-indicator{
     text-align:center; font-size:.78rem; color:var(--meta); padding:0; height:0;
     overflow:hidden; transition:height .15s ease; max-width:480px; margin:0 auto;
@@ -80,6 +130,20 @@
   .thumb-photo{
     position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
   }
+  .thumb-actions{
+    position:absolute; top:10px; right:10px; z-index:1; display:flex; gap:6px;
+  }
+  .icon-btn{
+    width:32px; height:32px; border-radius:50%; border:none; cursor:pointer;
+    background:rgba(0,0,0,.32); color:#fff; display:flex; align-items:center;
+    justify-content:center; backdrop-filter:blur(2px);
+  }
+  .icon-btn:hover{ background:rgba(0,0,0,.46); }
+  .icon-btn.active{ color:var(--amber); }
+  .empty-saved{
+    padding:60px 24px; text-align:center; color:var(--meta); font-size:.95rem;
+    max-width:400px; margin:0 auto;
+  }
   .cat-label{
     font-size:.72rem; font-weight:600; color:var(--meta); text-transform:uppercase;
     letter-spacing:.6px; margin:0 0 8px;
@@ -115,13 +179,31 @@
 <header>
   <div class="brand-row">
     <p class="brand">StudyBrief</p>
-    <button class="load-btn" id="loadBtn">Load JSON</button>
-    <input type="file" id="fileInput" accept="application/json" style="display:none">
+    <div class="header-actions">
+      <button class="load-btn" id="customizeBtn">Customize</button>
+      <button class="load-btn" id="loadBtn">Load JSON</button>
+      <input type="file" id="fileInput" accept="application/json" style="display:none">
+    </div>
   </div>
   <div class="tabs" id="tabs"></div>
 </header>
 <div class="pull-indicator" id="pullIndicator">Release to refresh</div>
 <div class="progress" id="progress"></div>
+
+<div class="modal-overlay" id="customizeModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Customize your feed</h2>
+      <button class="modal-close" id="closeCustomize" aria-label="Close">&times;</button>
+    </div>
+    <p class="modal-sub">Pick the topics you care about within each category. Leave a category untouched to keep seeing everything in it.</p>
+    <div class="modal-body" id="customizeBody"></div>
+    <div class="modal-footer">
+      <button class="btn-text" id="clearInterests">Clear all filters</button>
+      <button class="btn-primary" id="saveInterests">Save</button>
+    </div>
+  </div>
+</div>
 
 <main class="feed" id="feed"></main>
 <div class="toast" id="toast"></div>
@@ -129,6 +211,7 @@
 <script>
 const CATS = {
   all: {label:"All"},
+  saved: {label:"Saved"},
   exams: {label:"Exam", color:"#1F7A70"},
   govt: {label:"Govt Job", color:"#D9542A"},
   private: {label:"Pvt Job", color:"#5B5F97"},
@@ -136,27 +219,27 @@ const CATS = {
 };
 
 const SAMPLE_CARDS = [
-  {cat:"exams", tag:"Exam", color:"#1F7A70",
+  {id:"sample-exams-1", cat:"exams", tag:"Exam", color:"#1F7A70",
    headline:"UGC NET December session dates released",
    summary:"The University Grants Commission has announced exam dates for the December cycle of UGC NET. Candidates can apply through the official portal starting next week. The exam covers over 80 subjects and is used for junior research fellowships and assistant professor eligibility. Officials confirmed the exam pattern remains unchanged this cycle, with two papers on the same day. Admit cards will be issued two weeks before the exam date. Students are advised to check their category-wise eligibility criteria on the official website before applying, as late corrections will not be accepted after the form closes.",
    source:"ugcnet.nta.nic.in", link:"#", published:"2026-09-15T09:00:00Z"},
-  {cat:"govt", tag:"Govt Job", color:"#D9542A",
+  {id:"sample-govt-2", cat:"govt", tag:"Govt Job", color:"#D9542A",
    headline:"SSC opens 12,000 posts for Combined Graduate Level exam",
    summary:"The Staff Selection Commission has opened applications for over 12,000 posts under the Combined Graduate Level recruitment. Vacancies span ministries including finance, home affairs, and railways. Graduates from any stream can apply, with age limits varying by post. The selection process includes two computer-based tests followed by a skill or document verification round. The application window stays open for three weeks, and the commission has waived the usual fee for female and reserved-category candidates. A detailed post-wise breakdown will be published closer to the exam date on the official recruitment page.",
    source:"ssc.nic.in", link:"#", published:"2026-09-16T11:30:00Z"},
-  {cat:"courses", tag:"Course", color:"#F2A93B",
+  {id:"sample-courses-3", cat:"courses", tag:"Course", color:"#F2A93B",
    headline:"IIM Bangalore launches 6-month data strategy program",
    summary:"IIM Bangalore has introduced a six-month executive program in data strategy for working professionals. The course covers analytics, decision-making, and leadership through a mix of live online sessions and one campus visit. It is aimed at professionals with at least three years of experience in any field. Applications are being accepted on a rolling basis, with the first batch starting in November. The institute said the program includes mentorship from senior faculty and a capstone project based on the learner's own organisation. Fees can be paid in instalments, and limited scholarships are available for eligible candidates.",
    source:"iimb.ac.in", link:"#", published:"2026-09-14T14:00:00Z"},
-  {cat:"private", tag:"Pvt Job", color:"#5B5F97",
+  {id:"sample-private-4", cat:"private", tag:"Pvt Job", color:"#5B5F97",
    headline:"TCS to hire 40,000 freshers this financial year",
    summary:"Tata Consultancy Services has announced plans to hire around 40,000 freshers in the current financial year, mainly from engineering and computer science backgrounds. The hiring will happen through campus drives and the company's national qualifier test. Roles will span software development, cloud services, and cybersecurity. New hires will go through a structured training program before being assigned to project teams. The company said demand from clients in banking and retail sectors is driving the expansion. Interested candidates can register through the official careers page once campus drives are announced for their institution.",
    source:"tcs.com", link:"#", published:"2026-09-17T08:15:00Z"},
-  {cat:"exams", tag:"Exam", color:"#1F7A70",
+  {id:"sample-exams-5", cat:"exams", tag:"Exam", color:"#1F7A70",
    headline:"CBSE Class 10, 12 board exam datesheet expected next month",
    summary:"The Central Board of Secondary Education is expected to release the datesheet for Class 10 and 12 board exams next month. Exams are likely to begin in mid-February, following the usual academic calendar. The board has asked schools to complete practical exams and internal assessments before the theory exams start. Students can expect the same exam pattern as last year, with no major changes to marking schemes. Sample papers for major subjects are already available on the CBSE website. Officials advised students to begin revision early and rely only on official study material for accurate preparation.",
    source:"cbse.gov.in", link:"#", published:"2026-09-13T10:00:00Z"},
-  {cat:"govt", tag:"Govt Job", color:"#D9542A",
+  {id:"sample-govt-6", cat:"govt", tag:"Govt Job", color:"#D9542A",
    headline:"Railway RRB announces group D recruitment for 2027",
    summary:"The Railway Recruitment Board has announced a new recruitment drive for Group D posts, opening thousands of vacancies across zones. The role covers track maintenance, technical support, and station operations. Candidates who have passed Class 10 are eligible to apply, with relaxed age limits for reserved categories. The selection process includes a computer-based test, physical efficiency test, and document verification. This is the first Group D drive in three years, and officials expect a high number of applicants. The application portal will open next month, and candidates are advised to keep documents ready in advance.",
    source:"rrbcdg.gov.in", link:"#", published:"2026-09-12T06:45:00Z"},
@@ -228,6 +311,124 @@ const CARDS_FROM_PIPELINE_KEY = {
   courses: "courses",
 };
 
+const SUBCATEGORY_LABELS = {
+  exams: {
+    engineering_entrance: "Engineering Entrance", medical_entrance: "Medical Entrance",
+    pg_research: "Postgrad & Research (NET/GATE)", management_entrance: "Management/MBA Entrance",
+    law_entrance: "Law Entrance", design_entrance: "Design & Fashion Entrance",
+    architecture_entrance: "Architecture Entrance", agriculture_entrance: "Agriculture Entrance",
+    hospitality_entrance: "Hotel Management Entrance", university_entrance: "Common University Entrance",
+    civil_services_exam: "Civil Services (UPSC CSE)", teaching_eligibility: "Teaching Eligibility",
+    school_boards: "School Board Exams", state_entrance: "State-Level Entrance Exams",
+  },
+  courses: {
+    engineering_course: "Engineering & Technology", medical_course: "Medical & Health Sciences",
+    it_data_science: "Computer Science / IT / Data Science", management_course: "Management & Business",
+    commerce_finance: "Commerce & Finance", law_course: "Law",
+    design_arts: "Design & Fine Arts", pure_sciences: "Pure Sciences",
+    humanities: "Arts & Humanities", agriculture_course: "Agriculture & Allied Sciences",
+    hospitality_course: "Hospitality & Tourism", teacher_training: "Education / Teacher Training",
+    vocational_skills: "Skill Development & Vocational", online_courses: "Online / MOOC Courses",
+  },
+  govt: {
+    banking_govt: "Banking (Public Sector)", railways: "Railways",
+    ssc: "SSC (CGL/CHSL/MTS/GD)", defence: "Defence (Army/Navy/Air Force)",
+    police_paramilitary: "Police & Paramilitary", civil_services_job: "Civil Services (UPSC)",
+    state_psc: "State PSC", teaching_govt: "Teaching (Govt Schools)",
+    psu: "PSU Jobs", judiciary: "Judiciary", postal: "Postal Services",
+    insurance_govt: "Insurance (LIC/GIC)", healthcare_govt: "Healthcare (Govt)",
+    municipal: "Municipal / Local Body",
+  },
+  private: {
+    it_tech: "IT / Software / Tech", banking_finance_pvt: "Banking & Finance (Private)",
+    bpo_kpo: "BPO / KPO / Customer Support", sales_marketing: "Sales & Marketing",
+    retail_ecommerce: "Retail & E-commerce", manufacturing: "Manufacturing & Core Engineering",
+    startups: "Startups", healthcare_pharma: "Healthcare & Pharma (Private)",
+    media_content: "Media, Content & Journalism", hospitality_pvt: "Hospitality (Private)",
+    consulting: "Consulting", internships: "Internships & Fresher Programs",
+  },
+};
+
+const CATEGORY_HEADINGS = { exams: "Exam", courses: "Course", govt: "Govt Job", private: "Pvt Job" };
+
+// --- Customize / interest filters (saved locally on this device) --------
+let selectedInterests = {};
+try{
+  selectedInterests = JSON.parse(localStorage.getItem('studybrief_interests') || '{}');
+}catch(e){ selectedInterests = {}; }
+let interestDraft = {};
+
+function saveInterestsToStorage(){
+  try{ localStorage.setItem('studybrief_interests', JSON.stringify(selectedInterests)); }
+  catch(e){ /* storage unavailable — filter still works for this session */ }
+}
+
+function updateCustomizeBadge(){
+  const activeCount = Object.values(selectedInterests).filter(arr => arr && arr.length).length;
+  document.getElementById('customizeBtn').textContent =
+    activeCount ? `Customize (${activeCount})` : 'Customize';
+}
+
+function openCustomizeModal(){
+  interestDraft = JSON.parse(JSON.stringify(selectedInterests)); // work on a copy
+  const body = document.getElementById('customizeBody');
+  body.innerHTML = Object.entries(CATEGORY_HEADINGS).map(([catKey, heading])=>{
+    const options = SUBCATEGORY_LABELS[catKey] || {};
+    const chips = Object.entries(options).map(([slug,label])=>{
+      const isSelected = (interestDraft[catKey]||[]).includes(slug);
+      return `<button class="interest-chip ${isSelected?'selected':''}" data-cat="${catKey}" data-slug="${slug}">${label}</button>`;
+    }).join('');
+    return `<div class="interest-group"><h3>${heading}</h3><div class="interest-chips">${chips}</div></div>`;
+  }).join('');
+  document.getElementById('customizeModal').classList.add('show');
+}
+
+function closeCustomizeModal(){
+  document.getElementById('customizeModal').classList.remove('show');
+}
+
+document.getElementById('customizeBtn').addEventListener('click', openCustomizeModal);
+document.getElementById('closeCustomize').addEventListener('click', closeCustomizeModal);
+document.getElementById('customizeModal').addEventListener('click', (e)=>{
+  if(e.target.id === 'customizeModal') closeCustomizeModal(); // click outside the panel
+});
+
+document.getElementById('customizeBody').addEventListener('click', (e)=>{
+  const chip = e.target.closest('.interest-chip');
+  if(!chip) return;
+  const cat = chip.dataset.cat, slug = chip.dataset.slug;
+  if(!interestDraft[cat]) interestDraft[cat] = [];
+  const idx = interestDraft[cat].indexOf(slug);
+  if(idx > -1) interestDraft[cat].splice(idx, 1);
+  else interestDraft[cat].push(slug);
+  chip.classList.toggle('selected');
+});
+
+document.getElementById('saveInterests').addEventListener('click', ()=>{
+  selectedInterests = interestDraft;
+  saveInterestsToStorage();
+  updateCustomizeBadge();
+  closeCustomizeModal();
+  render();
+  showToast("Feed customized");
+});
+
+document.getElementById('clearInterests').addEventListener('click', ()=>{
+  selectedInterests = {};
+  saveInterestsToStorage();
+  updateCustomizeBadge();
+  closeCustomizeModal();
+  render();
+  showToast("Filters cleared — showing everything");
+});
+
+function matchesInterestFilter(c){
+  const sel = selectedInterests[c.cat];
+  if(!sel || sel.length === 0) return true;       // no filter set for this category
+  if(!c.subcategory) return true;                  // untagged story — never hide it
+  return sel.includes(c.subcategory);
+}
+
 const CARDS = [...SAMPLE_CARDS];
 
 const tabsEl = document.getElementById('tabs');
@@ -247,7 +448,9 @@ function mapApiCards(raw){
   return raw.map(item=>{
     const catKey = CARDS_FROM_PIPELINE_KEY[item.category] || item.category || "exams";
     return {
+      id: item.id,
       cat: catKey,
+      subcategory: item.subcategory || null,
       tag: CATS[catKey] ? CATS[catKey].label : "News",
       color: (CATS[catKey] && CATS[catKey].color) || "#5B5F97",
       headline: item.headline,
@@ -342,18 +545,60 @@ feedEl.addEventListener('touchend', ()=>{
   pulling = false;
 }, {passive:true});
 
+// --- Bookmarks (saved locally on this device) ----------------------------
+let bookmarks = new Set();
+try{
+  bookmarks = new Set(JSON.parse(localStorage.getItem('studybrief_bookmarks') || '[]'));
+}catch(e){ /* ignore, start with empty set */ }
+
+function saveBookmarks(){
+  try{ localStorage.setItem('studybrief_bookmarks', JSON.stringify([...bookmarks])); }
+  catch(e){ /* storage unavailable — bookmark still works for this session */ }
+}
+
+function shareCard(c){
+  if(navigator.share){
+    navigator.share({ title: c.headline, text: c.summary.slice(0,140)+'…', url: c.link })
+      .catch(()=>{}); // user cancelled — no error needed
+  }else{
+    navigator.clipboard.writeText(c.link)
+      .then(()=> showToast("Link copied to clipboard"))
+      .catch(()=> showToast("Couldn't copy link"));
+  }
+}
+
 function render(){
   tabsEl.innerHTML = Object.entries(CATS).map(([key,c])=>
     `<button class="tab ${key===activeCat?'active':''}" data-cat="${key}">${c.label}</button>`
   ).join('');
 
-  const visible = activeCat==="all" ? CARDS : CARDS.filter(c=>c.cat===activeCat);
+  let visible;
+  if(activeCat==="all") visible = CARDS.filter(matchesInterestFilter);
+  else if(activeCat==="saved") visible = CARDS.filter(c=>bookmarks.has(String(c.id)));
+  else visible = CARDS.filter(c=>c.cat===activeCat && matchesInterestFilter(c));
 
   progressEl.innerHTML = visible.map(()=>`<span><i></i></span>`).join('');
 
-  feedEl.innerHTML = visible.map(c=>`
+  if(activeCat==="saved" && visible.length===0){
+    feedEl.innerHTML = `<div class="empty-saved">No saved stories yet — tap the bookmark icon on any card to keep it here.</div>`;
+    return;
+  }
+
+  feedEl.innerHTML = visible.map(c=>{
+    const isSaved = bookmarks.has(String(c.id));
+    return `
     <article class="card">
-      <div class="thumb" style="background:${c.color}">${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}</div>
+      <div class="thumb" style="background:${c.color}">
+        ${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}
+        <div class="thumb-actions">
+          <button class="icon-btn ${isSaved?'active':''}" data-action="bookmark" data-id="${c.id}" aria-label="Save">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" fill="${isSaved?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" data-action="share" data-id="${c.id}" aria-label="Share">
+            <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="18" cy="5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="12" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="19" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="8.1" y1="10.8" x2="15.9" y2="6.2" stroke="currentColor" stroke-width="1.8"/><line x1="8.1" y1="13.2" x2="15.9" y2="17.8" stroke="currentColor" stroke-width="1.8"/></svg>
+          </button>
+        </div>
+      </div>
       <p class="cat-label">${c.tag}</p>
       <h2 class="headline">${c.headline}</h2>
       <p class="summary">${c.summary}</p>
@@ -362,7 +607,8 @@ function render(){
         <a class="source-link" href="${c.link}" target="_blank" rel="noopener">Read More</a>
       </div>
     </article>
-  `).join('');
+  `;
+  }).join('');
 
   bindScroll(visible.length);
 }
@@ -386,6 +632,27 @@ tabsEl.addEventListener('click', e=>{
   render();
 });
 
+feedEl.addEventListener('click', e=>{
+  const btn = e.target.closest('.icon-btn');
+  if(!btn) return;
+  const id = String(btn.dataset.id);
+  const card = CARDS.find(c => String(c.id) === id);
+  if(!card) return;
+
+  if(btn.dataset.action === 'bookmark'){
+    if(bookmarks.has(id)){
+      bookmarks.delete(id);
+    }else{
+      bookmarks.add(id);
+    }
+    saveBookmarks();
+    render(); // re-render to update the icon state (and the Saved tab list)
+  }else if(btn.dataset.action === 'share'){
+    shareCard(card);
+  }
+});
+
+updateCustomizeBadge();
 render();
 loadLive();
 </script>

@@ -60,6 +60,11 @@
   .thumb-url-input:focus{ border-color:var(--ink); outline:none; color:var(--ink); }
   .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;}
   .tag{ font-size:.72rem; font-weight:600; color:var(--meta); text-transform:none; }
+  .subcat-select{
+    width:100%; font-size:.82rem; color:var(--ink); background:var(--paper);
+    border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:10px;
+    font-family:'Inter',sans-serif;
+  }
   .headline{
     font-family:'Source Serif 4',serif; font-weight:700; font-size:1.1rem; margin:0 0 8px;
     width:100%; border:none; background:transparent; color:var(--ink); font-family:'Source Serif 4',serif;
@@ -102,6 +107,44 @@ const CATS = {
   govt_jobs:          { color: "#D9542A" },
   private_jobs:       { color: "#5B5F97" },
   courses:            { color: "#F2A93B" },
+};
+
+const SUBCATEGORY_LABELS = {
+  competitive_exams: {
+    engineering_entrance: "Engineering Entrance", medical_entrance: "Medical Entrance",
+    pg_research: "Postgrad & Research (NET/GATE)", management_entrance: "Management/MBA Entrance",
+    law_entrance: "Law Entrance", design_entrance: "Design & Fashion Entrance",
+    architecture_entrance: "Architecture Entrance", agriculture_entrance: "Agriculture Entrance",
+    hospitality_entrance: "Hotel Management Entrance", university_entrance: "Common University Entrance",
+    civil_services_exam: "Civil Services (UPSC CSE)", teaching_eligibility: "Teaching Eligibility",
+    school_boards: "School Board Exams", state_entrance: "State-Level Entrance Exams",
+  },
+  courses: {
+    engineering_course: "Engineering & Technology", medical_course: "Medical & Health Sciences",
+    it_data_science: "Computer Science / IT / Data Science", management_course: "Management & Business",
+    commerce_finance: "Commerce & Finance", law_course: "Law",
+    design_arts: "Design & Fine Arts", pure_sciences: "Pure Sciences",
+    humanities: "Arts & Humanities", agriculture_course: "Agriculture & Allied Sciences",
+    hospitality_course: "Hospitality & Tourism", teacher_training: "Education / Teacher Training",
+    vocational_skills: "Skill Development & Vocational", online_courses: "Online / MOOC Courses",
+  },
+  govt_jobs: {
+    banking_govt: "Banking (Public Sector)", railways: "Railways",
+    ssc: "SSC (CGL/CHSL/MTS/GD)", defence: "Defence (Army/Navy/Air Force)",
+    police_paramilitary: "Police & Paramilitary", civil_services_job: "Civil Services (UPSC)",
+    state_psc: "State PSC", teaching_govt: "Teaching (Govt Schools)",
+    psu: "PSU Jobs", judiciary: "Judiciary", postal: "Postal Services",
+    insurance_govt: "Insurance (LIC/GIC)", healthcare_govt: "Healthcare (Govt)",
+    municipal: "Municipal / Local Body",
+  },
+  private_jobs: {
+    it_tech: "IT / Software / Tech", banking_finance_pvt: "Banking & Finance (Private)",
+    bpo_kpo: "BPO / KPO / Customer Support", sales_marketing: "Sales & Marketing",
+    retail_ecommerce: "Retail & E-commerce", manufacturing: "Manufacturing & Core Engineering",
+    startups: "Startups", healthcare_pharma: "Healthcare & Pharma (Private)",
+    media_content: "Media, Content & Journalism", hospitality_pvt: "Hospitality (Private)",
+    consulting: "Consulting", internships: "Internships & Fresher Programs",
+  },
 };
 
 const THUMB_ART = {
@@ -200,6 +243,12 @@ function render(cards){
       <div class="card-top">
         <span class="tag">${c.category} · ${c.source_domain || ''}</span>
       </div>
+      <select class="subcat-select" data-field="subcategory">
+        <option value="">— No sub-interest tag —</option>
+        ${Object.entries(SUBCATEGORY_LABELS[c.category] || {}).map(([slug,label])=>
+          `<option value="${slug}" ${c.subcategory===slug?'selected':''}>${label}</option>`
+        ).join('')}
+      </select>
       <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
       <textarea data-field="summary">${c.summary}</textarea>
       <p class="meta"><a href="${c.source_link}" target="_blank" rel="noopener">View original source ↗</a></p>
@@ -254,10 +303,11 @@ listEl.addEventListener('click', async (e)=>{
       const headline = cardEl.querySelector('[data-field=headline]').value;
       const summary = cardEl.querySelector('[data-field=summary]').value;
       const thumbnail_url = cardEl.querySelector('[data-field=thumbnail_url]').value.trim() || null;
+      const subcategory = cardEl.querySelector('[data-field=subcategory]').value || null;
       await fetch(`${API_BASE}/api/admin/news/${id}`, {
         method:'PATCH',
         headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
-        body: JSON.stringify({ headline, summary, thumbnail_url })
+        body: JSON.stringify({ headline, summary, thumbnail_url, subcategory })
       });
     }
   }catch(err){

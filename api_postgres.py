@@ -23,6 +23,7 @@ RUN:
 
 The table is created automatically on startup, using schema_postgres.sql.
 """
+
 from datetime import datetime
 import os
 from contextlib import contextmanager
@@ -82,6 +83,7 @@ init_db()
 
 class NewsCardIn(BaseModel):
     category: str
+    subcategory: Optional[str] = None
     headline: str
     summary: str
     thumbnail_url: Optional[str] = None
@@ -100,6 +102,7 @@ class NewsCardEdit(BaseModel):
     headline: Optional[str] = None
     summary: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    subcategory: Optional[str] = None
 
 
 def verify_admin(x_admin_token: str = Header(...)):
@@ -118,6 +121,9 @@ def list_news(
     category: Optional[str] = Query(
         None, description="competitive_exams | govt_jobs | private_jobs | courses"
     ),
+    subcategory: Optional[str] = Query(
+        None, description="fine-grained interest tag, e.g. 'engineering_entrance'"
+    ),
     limit: int = Query(20, le=100),
     offset: int = 0,
 ):
@@ -128,6 +134,10 @@ def list_news(
     if category:
         query += " AND category = %s"
         params.append(category)
+
+    if subcategory:
+        query += " AND subcategory = %s"
+        params.append(subcategory)
 
     query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
     params += [limit, offset]
@@ -164,11 +174,11 @@ def add_news_item(card: NewsCardIn):
                 cur.execute(
                     """
                     INSERT INTO news_cards
-                        (category, headline, summary, thumbnail_url,
+                        (category, subcategory, headline, summary, thumbnail_url,
                          source_link, source_domain, published_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (card.category, card.headline, card.summary,
+                    (card.category, card.subcategory, card.headline, card.summary,
                      card.thumbnail_url, card.source_link, domain,
                      card.published_at),
                 )
@@ -202,11 +212,11 @@ def add_news_bulk(cards: List[NewsCardIn]):
                     cur.execute(
                         """
                         INSERT INTO news_cards
-                            (category, headline, summary, thumbnail_url,
+                            (category, subcategory, headline, summary, thumbnail_url,
                              source_link, source_domain, published_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         """,
-                        (card.category, card.headline, card.summary,
+                        (card.category, card.subcategory, card.headline, card.summary,
                          card.thumbnail_url, card.source_link, domain,
                          card.published_at),
                     )
@@ -308,7 +318,7 @@ def edit_card(card_id: int, edit: NewsCardEdit):
             if not row:
                 raise HTTPException(status_code=404, detail="Not found")
             return row
-            
+
 
 @app.post("/api/admin/reset-to-draft", dependencies=[Depends(verify_admin)])
 def reset_all_to_draft():
