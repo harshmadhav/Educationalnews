@@ -297,6 +297,30 @@ def build_card(article):
 
 API_URL = os.environ.get("NEWS_API_URL", "http://localhost:8000")
 
+
+def fetch_custom_subcategories():
+    """
+    Pulls admin-added sub-interest tags from the live API and merges
+    them into SUBCATEGORY_OPTIONS, so the AI rewrite step can tag new
+    stories with anything added through the admin tool — not just the
+    56 built-in tags shipped in this file. Safe to call even if the
+    API is unreachable; it just falls back to the built-in list.
+    """
+    try:
+        resp = requests.get(f"{API_URL}/api/subcategories", timeout=10)
+        resp.raise_for_status()
+        items = resp.json()
+        added = 0
+        for item in items:
+            category, slug = item.get("category"), item.get("slug")
+            if category in SUBCATEGORY_OPTIONS and slug and slug not in SUBCATEGORY_OPTIONS[category]:
+                SUBCATEGORY_OPTIONS[category].append(slug)
+                added += 1
+        if added:
+            print(f"Loaded {added} admin-added sub-interest tag(s) from the API.")
+    except requests.RequestException as e:
+        print(f"Could not load custom sub-interest tags ({e}) — using built-in list only.")
+
 def push_to_api(cards):
     """Sends the finished cards to the backend API (see api.py) so the
     app's live feed picks them up. Falls back gracefully if the API
@@ -326,6 +350,9 @@ def push_to_api(cards):
 
 
 def run_pipeline():
+    # Step 0: pick up any sub-interest tags added since the last run
+    fetch_custom_subcategories()
+
     # Step 1: fetch everything first
     all_articles = []
     for category, feed_url in RSS_FEEDS.items():

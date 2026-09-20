@@ -664,8 +664,10 @@ document.getElementById('searchInput').addEventListener('input', (e)=>{
 
 function matchesSearch(c){
   if(!searchQuery) return true;
+  const subcatLabel = (SUBCATEGORY_LABELS[c.cat] && SUBCATEGORY_LABELS[c.cat][c.subcategory]) || '';
   return c.headline.toLowerCase().includes(searchQuery)
-      || c.summary.toLowerCase().includes(searchQuery);
+      || c.summary.toLowerCase().includes(searchQuery)
+      || subcatLabel.toLowerCase().includes(searchQuery);
 }
 
 // --- Deadline urgency badge -------------------------------------------------
