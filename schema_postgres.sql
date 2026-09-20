@@ -74,6 +74,25 @@ CREATE INDEX IF NOT EXISTS idx_news_subcategory
     ON news_cards (subcategory);
 
 
+-- Sub-interest tags added from the admin tool, beyond the built-in list
+-- shipped in the app's code. Both the review queue and the reader-facing
+-- "Customize" filter read from this table (merged with the built-in
+-- list) so a newly added tag shows up everywhere immediately.
+CREATE TABLE IF NOT EXISTS custom_subcategories (
+    id          SERIAL PRIMARY KEY,
+    category    TEXT NOT NULL CHECK (
+                    category IN (
+                        'competitive_exams', 'govt_jobs',
+                        'private_jobs', 'courses'
+                    )
+                ),
+    slug        TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (category, slug)
+);
+
+
 -- ============================================================
 -- Optional (add later, not needed for MVP):
 --   users            — if you add saved/bookmarked stories

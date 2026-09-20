@@ -416,6 +416,23 @@ const SUBCATEGORY_LABELS = {
   },
 };
 
+// Fetches admin-added sub-interest tags and merges them into
+// SUBCATEGORY_LABELS in place — this is what makes a newly-added tag
+// show up in "Customize" without needing to redeploy the app.
+async function loadCustomSubcategories(){
+  try{
+    const res = await fetch(`${API_BASE}/api/subcategories`);
+    if(!res.ok) return;
+    const items = await res.json();
+    items.forEach(item => {
+      const shortKey = CARDS_FROM_PIPELINE_KEY[item.category] || item.category;
+      if(!SUBCATEGORY_LABELS[shortKey]) SUBCATEGORY_LABELS[shortKey] = {};
+      SUBCATEGORY_LABELS[shortKey][item.slug] = item.label;
+    });
+  }catch(e){ /* offline or server down — Customize just uses the built-in list */ }
+}
+
+
 const CATEGORY_HEADINGS = { exams: "Exam", courses: "Course", govt: "Govt Job", private: "Pvt Job" };
 
 // --- Customize / interest filters (saved locally on this device) --------
@@ -848,11 +865,14 @@ function maybeShowOnboarding(){
   document.getElementById('onboardModal').classList.add('show');
 }
 
-updateCustomizeBadge();
-render();
-maybeShowOnboarding();
-markVisitedNow();
-loadLive();
+(async function initApp(){
+  updateCustomizeBadge();
+  render();
+  await loadCustomSubcategories(); // so onboarding/Customize include any admin-added tags
+  maybeShowOnboarding();
+  markVisitedNow();
+  loadLive();
+})();
 </script>
 </body>
 </html>

@@ -293,6 +293,74 @@ const SUBCATEGORY_LABELS = {
   },
 };
 
+// Fetches admin-added sub-interest tags and merges them into
+// SUBCATEGORY_LABELS in place, so every dropdown that already reads
+// from this object picks them up automatically.
+async function loadCustomSubcategories(){
+  if(!API_BASE) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/subcategories`);
+    if(!res.ok) return;
+    const items = await res.json();
+    items.forEach(item => {
+      if(!SUBCATEGORY_LABELS[item.category]) SUBCATEGORY_LABELS[item.category] = {};
+      SUBCATEGORY_LABELS[item.category][item.slug] = item.label;
+    });
+  }catch(e){ /* offline or server down — dropdowns just use the built-in list */ }
+}
+
+function slugify(label){
+  return label.trim().toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .slice(0, 60);
+}
+
+// Builds the <option> list for a subcategory <select>, always starting
+// with "None" and ending with "+ Add new sub-category".
+function buildSubcatOptionsHTML(category, selectedSlug){
+  const options = SUBCATEGORY_LABELS[category] || {};
+  return `<option value="">None</option>` +
+    Object.entries(options).map(([slug,label])=>
+      `<option value="${slug}" ${selectedSlug===slug?'selected':''}>${label}</option>`
+    ).join('') +
+    `<option value="__add_new__">+ Add new sub-category…</option>`;
+}
+
+// Shared handler: attach to any subcategory <select>'s "change" event.
+// Prompts for a new tag's name when "+ Add new sub-category" is picked,
+// saves it to the server, and selects it once added.
+async function handleSubcatSelectChange(select){
+  if(select.value !== '__add_new__') return;
+  const category = select.dataset.category || select.closest('.card')?.querySelector('.category-select')?.value
+                    || document.getElementById('composeCategory')?.value;
+  const label = prompt("Name the new sub-interest tag (e.g. \"Merchant Navy Entrance\"):");
+  if(!label || !label.trim()){
+    select.value = ''; // cancelled — fall back to "None"
+    return;
+  }
+  const slug = slugify(label);
+  if(!slug){
+    alert("That name didn't produce a usable tag — try letters and numbers.");
+    select.value = '';
+    return;
+  }
+  try{
+    await fetch(`${API_BASE}/api/admin/subcategories`, {
+      method: 'POST',
+      headers: { "X-Admin-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ category, slug, label: label.trim() }),
+    });
+    if(!SUBCATEGORY_LABELS[category]) SUBCATEGORY_LABELS[category] = {};
+    SUBCATEGORY_LABELS[category][slug] = label.trim();
+    select.innerHTML = buildSubcatOptionsHTML(category, slug);
+  }catch(err){
+    alert(`Couldn't save the new tag: ${err.message}`);
+    select.value = '';
+  }
+}
+
+
 const THUMB_ART = {
   competitive_exams: `<svg viewBox="0 0 300 170" xmlns="http://www.w3.org/2000/svg" class="thumb-art">
     <rect x="150" y="24" width="110" height="130" rx="6" fill="#fff" opacity="0.14"/>
@@ -362,6 +430,8 @@ async function loadQueue(){
     return;
   }
 
+  await loadCustomSubcategories();
+
   listEl.innerHTML = `<p class="empty">Loading…</p>`;
   try{
     const res = await fetch(`${API_BASE}/api/admin/news?status=${currentStatus}&limit=100`, {
@@ -418,11 +488,8 @@ function render(cards){
         </select>
         <span class="source-domain-note">${c.source_domain || ''}</span>
       </div>
-      <select class="subcat-select" data-field="subcategory">
-        <option value="">— No sub-interest tag —</option>
-        ${Object.entries(SUBCATEGORY_LABELS[c.category] || {}).map(([slug,label])=>
-          `<option value="${slug}" ${c.subcategory===slug?'selected':''}>${label}</option>`
-        ).join('')}
+      <select class="subcat-select" data-field="subcategory" data-category="${c.category}">
+        ${buildSubcatOptionsHTML(c.category, c.subcategory)}
       </select>
       <label class="deadline-inline-label">Deadline <input type="date" class="deadline-input" data-field="deadline" value="${c.deadline || ''}"></label>
       <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
@@ -457,13 +524,16 @@ function render(cards){
       const cardEl = select.closest('.card');
       const newCategory = select.value;
       const subcatSelect = cardEl.querySelector('.subcat-select');
-      const options = SUBCATEGORY_LABELS[newCategory] || {};
       // Category changed — the old sub-interest tag likely doesn't belong
       // to the new category's list, so reset it rather than keep a
       // mismatched value.
-      subcatSelect.innerHTML = `<option value="">— No sub-interest tag —</option>` +
-        Object.entries(options).map(([slug,label])=>`<option value="${slug}">${label}</option>`).join('');
+      subcatSelect.dataset.category = newCategory;
+      subcatSelect.innerHTML = buildSubcatOptionsHTML(newCategory, null);
     });
+  });
+
+  listEl.querySelectorAll('.subcat-select').forEach(select => {
+    select.addEventListener('change', () => handleSubcatSelectChange(select));
   });
 
   listEl.querySelectorAll('.thumb-url-input').forEach(input => {
@@ -609,23 +679,24 @@ listEl.addEventListener('click', async (e)=>{
 function populateComposeSubcategories(){
   const category = document.getElementById('composeCategory').value;
   const select = document.getElementById('composeSubcategory');
-  const options = SUBCATEGORY_LABELS[category] || {};
-  select.innerHTML = `<option value="">— No sub-interest tag —</option>` +
-    Object.entries(options).map(([slug,label])=>`<option value="${slug}">${label}</option>`).join('');
+  select.dataset.category = category;
+  select.innerHTML = buildSubcatOptionsHTML(category, null);
 }
 
 document.getElementById('composeCategory').addEventListener('change', populateComposeSubcategories);
+document.getElementById('composeSubcategory').addEventListener('change', (e) => handleSubcatSelectChange(e.target));
 
 document.getElementById('composeContent').addEventListener('input', (e)=>{
   const words = e.target.value.trim().split(/\s+/).filter(Boolean).length;
   document.getElementById('composeWordCount').textContent = `(${words} words — aim for ~100)`;
 });
 
-document.getElementById('composeBtn').addEventListener('click', ()=>{
+document.getElementById('composeBtn').addEventListener('click', async ()=>{
   if(!API_BASE || !TOKEN){
     alert("Enter your API URL and admin token at the top first, then click Load.");
     return;
   }
+  await loadCustomSubcategories();
   populateComposeSubcategories();
   document.getElementById('composeModal').classList.add('show');
 });

@@ -237,6 +237,48 @@ def add_news_bulk(cards: List[NewsCardIn]):
     return {"added": added, "skipped_duplicates": skipped}
 
 
+class CustomSubcategoryIn(BaseModel):
+    category: str
+    slug: str
+    label: str
+
+
+@app.get("/api/subcategories")
+def list_custom_subcategories():
+    """
+    Public, read-only: every admin-added sub-interest tag, beyond the
+    built-in list shipped in the app's own code. Both admin.html and
+    index.html fetch this on load and merge it with their built-in
+    list, so a newly added tag appears everywhere without a redeploy.
+    """
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT category, slug, label FROM custom_subcategories ORDER BY label")
+            return cur.fetchall()
+
+
+@app.post("/api/admin/subcategories", dependencies=[Depends(verify_admin)])
+def add_custom_subcategory(item: CustomSubcategoryIn):
+    """Adds a new sub-interest tag for a category. Safe to call more than
+    once with the same slug — it just won't create a duplicate."""
+    valid_categories = {"competitive_exams", "govt_jobs", "private_jobs", "courses"}
+    if item.category not in valid_categories:
+        raise HTTPException(status_code=400, detail=f"Invalid category: {item.category}")
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO custom_subcategories (category, slug, label)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (category, slug) DO NOTHING
+                """,
+                (item.category, item.slug, item.label),
+            )
+            conn.commit()
+    return {"added": True, "category": item.category, "slug": item.slug, "label": item.label}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
