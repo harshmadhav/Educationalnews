@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS news_cards (
                             -- "Ad" label per advertising disclosure rules
     sponsor_name    TEXT,   -- brand/advertiser name shown next to "Ad"
 
+    deadline        DATE,   -- last date to apply/appear, when the story
+                            -- mentions one — drives the urgency badge
+
     headline        TEXT NOT NULL,
     summary         TEXT NOT NULL,          -- AI-rewritten, ~100 words
 
@@ -64,6 +67,7 @@ ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS subcategory TEXT;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS is_original BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS is_sponsored BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS sponsor_name TEXT;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS deadline DATE;
 
 -- Fast filtering by subcategory (the "Customize" feature's main query)
 CREATE INDEX IF NOT EXISTS idx_news_subcategory

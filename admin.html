@@ -75,6 +75,14 @@
     border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:10px;
     font-family:'Inter',sans-serif;
   }
+  .deadline-inline-label{
+    display:flex; align-items:center; gap:8px; font-size:.78rem; color:var(--meta);
+    margin-bottom:10px;
+  }
+  .deadline-input{
+    font-size:.82rem; color:var(--ink); background:var(--paper); border:1px solid var(--line);
+    border-radius:6px; padding:5px 7px; font-family:'Inter',sans-serif;
+  }
   .headline{
     font-family:'Source Serif 4',serif; font-weight:700; font-size:1.1rem; margin:0 0 8px;
     width:100%; border:none; background:transparent; color:var(--ink); font-family:'Source Serif 4',serif;
@@ -186,6 +194,9 @@
 
       <label class="form-label">Article or video link <span class="form-hint">(the source readers will open)</span></label>
       <input type="text" id="composeLink" class="form-input" placeholder="https://...">
+
+      <label class="form-label">Application deadline <span class="form-hint">(optional — shows an urgency badge in the app)</span></label>
+      <input type="date" id="composeDeadline" class="form-input">
 
       <label class="form-label">Thumbnail <span class="form-hint">(optional — leave blank to use the category icon)</span></label>
       <div class="compose-thumb-preview" id="composeThumbPreview"></div>
@@ -395,6 +406,7 @@ function render(cards){
           `<option value="${slug}" ${c.subcategory===slug?'selected':''}>${label}</option>`
         ).join('')}
       </select>
+      <label class="deadline-inline-label">Deadline <input type="date" class="deadline-input" data-field="deadline" value="${c.deadline || ''}"></label>
       <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
       <textarea data-field="summary">${c.summary}</textarea>
       <p class="meta"><a href="${c.source_link}" target="_blank" rel="noopener">View original source ↗</a></p>
@@ -531,10 +543,11 @@ listEl.addEventListener('click', async (e)=>{
       const summary = cardEl.querySelector('[data-field=summary]').value;
       const thumbnail_url = cardEl.querySelector('[data-field=thumbnail_url]').value.trim() || null;
       const subcategory = cardEl.querySelector('[data-field=subcategory]').value || null;
+      const deadline = cardEl.querySelector('[data-field=deadline]').value || null;
       await fetch(`${API_BASE}/api/admin/news/${id}`, {
         method:'PATCH',
         headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
-        body: JSON.stringify({ headline, summary, thumbnail_url, subcategory })
+        body: JSON.stringify({ headline, summary, thumbnail_url, subcategory, deadline })
       });
     }
   }catch(err){
@@ -617,6 +630,7 @@ function clearComposeForm(){
   document.getElementById('composeWordCount').textContent = '(0 words — aim for ~100)';
   document.getElementById('composeLink').value = '';
   document.getElementById('composeThumbnail').value = '';
+  document.getElementById('composeDeadline').value = '';
   document.getElementById('composeSponsored').checked = false;
   document.getElementById('composeAdvertiser').value = '';
   document.getElementById('advertiserFields').style.display = 'none';
@@ -634,6 +648,7 @@ async function submitComposedStory(publishImmediately){
   const subcategory = document.getElementById('composeSubcategory').value || null;
   const source_link = document.getElementById('composeLink').value.trim();
   const thumbnail_url = document.getElementById('composeThumbnail').value.trim() || null;
+  const deadline = document.getElementById('composeDeadline').value || null;
   const is_sponsored = document.getElementById('composeSponsored').checked;
   const sponsor_name = is_sponsored
     ? (document.getElementById('composeAdvertiser').value.trim() || null)
@@ -659,7 +674,7 @@ async function submitComposedStory(publishImmediately){
       headers: { "X-Admin-Token": TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify({
         category, subcategory, headline, summary, source_link, thumbnail_url,
-        is_original: !is_sponsored, is_sponsored, sponsor_name,
+        is_original: !is_sponsored, is_sponsored, sponsor_name, deadline,
       }),
     });
     if(!createRes.ok) throw new Error(`Server returned ${createRes.status}`);

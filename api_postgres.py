@@ -92,6 +92,7 @@ class NewsCardIn(BaseModel):
     is_original: bool = False
     is_sponsored: bool = False
     sponsor_name: Optional[str] = None
+    deadline: Optional[str] = None  # ISO date string, e.g. "2026-10-15"
 
 
 class NewsCardOut(NewsCardIn):
@@ -106,6 +107,7 @@ class NewsCardEdit(BaseModel):
     summary: Optional[str] = None
     thumbnail_url: Optional[str] = None
     subcategory: Optional[str] = None
+    deadline: Optional[str] = None
 
 
 def verify_admin(x_admin_token: str = Header(...)):
@@ -218,12 +220,12 @@ def add_news_bulk(cards: List[NewsCardIn]):
                         """
                         INSERT INTO news_cards
                             (category, subcategory, headline, summary, thumbnail_url,
-                             source_link, source_domain, published_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                             source_link, source_domain, published_at, deadline)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (card.category, card.subcategory, card.headline, card.summary,
                          card.thumbnail_url, card.source_link, domain,
-                         card.published_at),
+                         card.published_at, card.deadline),
                     )
                     conn.commit()
                     added += 1

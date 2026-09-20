@@ -41,6 +41,15 @@
     font-family:inherit;
   }
   .header-actions{ display:flex; gap:8px; align-items:center; }
+  .search-row{
+    display:flex; align-items:center; gap:8px; background:var(--paper-dim);
+    border:1px solid var(--line); border-radius:20px; padding:7px 12px; margin-top:10px;
+  }
+  .search-icon{ color:var(--meta); flex-shrink:0; }
+  .search-input{
+    border:none; background:transparent; outline:none; font-size:.88rem; color:var(--ink);
+    width:100%; font-family:'Inter',sans-serif;
+  }
 
   /* --- Customize modal --- */
   .modal-overlay{
@@ -163,6 +172,27 @@
     padding:2px 8px; border-radius:10px; font-size:.68rem; font-weight:700;
     letter-spacing:.3px; margin-left:6px; text-transform:none;
   }
+  .new-dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:var(--coral); margin-right:6px; vertical-align:middle;
+  }
+  .deadline-badge{
+    display:inline-flex; align-items:center; gap:4px; font-size:.72rem; font-weight:700;
+    padding:3px 9px; border-radius:10px; margin:0 0 10px; text-transform:none;
+  }
+  .deadline-urgent{ background:var(--coral); color:#fff; }
+  .deadline-soon{ background:var(--amber); color:var(--ink); }
+  .deadline-normal{ background:var(--paper-dim); color:var(--meta); border:1px solid var(--line); }
+  .related-section{ margin-top:16px; padding-top:14px; border-top:1px dashed var(--line); }
+  .related-title{
+    font-size:.72rem; font-weight:700; color:var(--meta); text-transform:uppercase;
+    letter-spacing:.5px; margin:0 0 8px;
+  }
+  .related-link{
+    display:block; font-size:.85rem; color:var(--ink); text-decoration:none;
+    padding:5px 0; border-bottom:1px solid transparent; cursor:pointer;
+  }
+  .related-link:hover{ border-bottom-color:var(--line); }
   .headline{
     font-family:'Source Serif 4',serif; font-weight:700; font-size:1.32rem;
     line-height:1.28; margin:0 0 10px;
@@ -201,6 +231,10 @@
     </div>
   </div>
   <div class="tabs" id="tabs"></div>
+  <div class="search-row">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input type="text" id="searchInput" placeholder="Search stories..." class="search-input">
+  </div>
 </header>
 <div class="pull-indicator" id="pullIndicator">Release to refresh</div>
 <div class="progress" id="progress"></div>
@@ -216,6 +250,20 @@
     <div class="modal-footer">
       <button class="btn-text" id="clearInterests">Clear all filters</button>
       <button class="btn-primary" id="saveInterests">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="onboardModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>What are you preparing for?</h2>
+    </div>
+    <p class="modal-sub">Pick the topics you care about — your feed will focus on these. You can always change this later from "Customize".</p>
+    <div class="modal-body" id="onboardBody"></div>
+    <div class="modal-footer">
+      <button class="btn-text" id="skipOnboard">Skip for now</button>
+      <button class="btn-primary" id="finishOnboard">Get started</button>
     </div>
   </div>
 </div>
@@ -482,6 +530,7 @@ function mapApiCards(raw){
       isOriginal: !!item.is_original,
       isSponsored: !!item.is_sponsored,
       sponsorName: item.sponsor_name || null,
+      deadline: item.deadline || null,
     };
   });
 }
@@ -589,15 +638,74 @@ function shareCard(c){
   }
 }
 
+// --- Search ----------------------------------------------------------------
+let searchQuery = "";
+document.getElementById('searchInput').addEventListener('input', (e)=>{
+  searchQuery = e.target.value.trim().toLowerCase();
+  render();
+});
+
+function matchesSearch(c){
+  if(!searchQuery) return true;
+  return c.headline.toLowerCase().includes(searchQuery)
+      || c.summary.toLowerCase().includes(searchQuery);
+}
+
+// --- Deadline urgency badge -------------------------------------------------
+function deadlineBadge(c){
+  if(!c.deadline) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due = new Date(c.deadline + 'T00:00:00');
+  if(isNaN(due.getTime())) return '';
+  const daysLeft = Math.round((due - today) / 86400000);
+  if(daysLeft < 0) return ''; // deadline already passed — not useful to show
+
+  const dateStr = due.toLocaleDateString(undefined, {day:'numeric', month:'short'});
+  let cls, text;
+  if(daysLeft === 0){ cls = 'deadline-urgent'; text = `Last day to apply — ${dateStr}`; }
+  else if(daysLeft <= 3){ cls = 'deadline-urgent'; text = `${daysLeft} day${daysLeft>1?'s':''} left — apply by ${dateStr}`; }
+  else if(daysLeft <= 7){ cls = 'deadline-soon'; text = `${daysLeft} days left — apply by ${dateStr}`; }
+  else{ cls = 'deadline-normal'; text = `Apply by ${dateStr}`; }
+
+  return `<span class="deadline-badge ${cls}">⏱ ${text}</span>`;
+}
+
+// --- "New since your last visit" -------------------------------------------
+const lastVisitTime = localStorage.getItem('studybrief_last_visit'); // null on first-ever visit
+
+function isNewSinceLastVisit(c){
+  if(!lastVisitTime || !c.addedOn) return false; // first visit — nothing is "new" yet
+  return new Date(c.addedOn) > new Date(lastVisitTime);
+}
+
+function markVisitedNow(){
+  try{ localStorage.setItem('studybrief_last_visit', new Date().toISOString()); }
+  catch(e){ /* storage unavailable — feature just won't persist across sessions */ }
+}
+
+// --- Related stories ---------------------------------------------------------
+function getRelatedStories(c){
+  let pool = CARDS.filter(o => o.id !== c.id && o.subcategory && o.subcategory === c.subcategory);
+  if(pool.length < 2){
+    pool = CARDS.filter(o => o.id !== c.id && o.cat === c.cat);
+  }
+  return pool.slice(0, 3);
+}
+
+function scrollToCard(id){
+  const el = feedEl.querySelector(`[data-card-id="${id}"]`);
+  if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
 function render(){
   tabsEl.innerHTML = Object.entries(CATS).map(([key,c])=>
     `<button class="tab ${key===activeCat?'active':''}" data-cat="${key}">${c.label}</button>`
   ).join('');
 
   let visible;
-  if(activeCat==="all") visible = CARDS.filter(matchesInterestFilter);
-  else if(activeCat==="saved") visible = CARDS.filter(c=>bookmarks.has(String(c.id)));
-  else visible = CARDS.filter(c=>c.cat===activeCat && matchesInterestFilter(c));
+  if(activeCat==="all") visible = CARDS.filter(c=>matchesInterestFilter(c) && matchesSearch(c));
+  else if(activeCat==="saved") visible = CARDS.filter(c=>bookmarks.has(String(c.id)) && matchesSearch(c));
+  else visible = CARDS.filter(c=>c.cat===activeCat && matchesInterestFilter(c) && matchesSearch(c));
 
   progressEl.innerHTML = visible.map(()=>`<span><i></i></span>`).join('');
 
@@ -605,11 +713,17 @@ function render(){
     feedEl.innerHTML = `<div class="empty-saved">No saved stories yet — tap the bookmark icon on any card to keep it here.</div>`;
     return;
   }
+  if(visible.length===0 && searchQuery){
+    feedEl.innerHTML = `<div class="empty-saved">No stories match "${searchQuery}".</div>`;
+    return;
+  }
 
   feedEl.innerHTML = visible.map(c=>{
     const isSaved = bookmarks.has(String(c.id));
+    const isNew = isNewSinceLastVisit(c);
+    const related = getRelatedStories(c);
     return `
-    <article class="card">
+    <article class="card" data-card-id="${c.id}">
       <div class="thumb" style="background:${c.color}">
         ${c.photo ? `<img src="${c.photo}" alt="" class="thumb-photo" onerror="this.outerHTML='${thumbArt(c.cat).replace(/'/g,"&#39;").replace(/\n/g,'')}'">` : thumbArt(c.cat)}
         ${isVideoLink(c.link) ? `<div class="play-overlay"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M8 5v14l11-7z" fill="#fff"/></svg></div>` : ''}
@@ -622,13 +736,19 @@ function render(){
           </button>
         </div>
       </div>
-      <p class="cat-label">${c.tag}${c.isSponsored ? `<span class="ad-badge">Ad${c.sponsorName ? ' · '+c.sponsorName : ''}</span>` : (c.isOriginal ? ' <span class="original-badge">Original</span>' : '')}</p>
+      <p class="cat-label">${isNew ? '<span class="new-dot" title="New since your last visit"></span>' : ''}${c.tag}${c.isSponsored ? `<span class="ad-badge">Ad${c.sponsorName ? ' · '+c.sponsorName : ''}</span>` : (c.isOriginal ? ' <span class="original-badge">Original</span>' : '')}</p>
+      ${deadlineBadge(c) ? `<div>${deadlineBadge(c)}</div>` : ''}
       <h2 class="headline">${c.headline}</h2>
       <p class="summary">${c.summary}</p>
       <div class="meta-row">
         <span class="meta-left">${dateLabel(c)}${c.source}</span>
         <a class="source-link" href="${c.link}" target="_blank" rel="noopener">Read More</a>
       </div>
+      ${related.length ? `
+      <div class="related-section">
+        <p class="related-title">Related stories</p>
+        ${related.map(r => `<a class="related-link" data-related-id="${r.id}">${r.headline}</a>`).join('')}
+      </div>` : ''}
     </article>
   `;
   }).join('');
@@ -656,6 +776,12 @@ tabsEl.addEventListener('click', e=>{
 });
 
 feedEl.addEventListener('click', e=>{
+  const relatedLink = e.target.closest('.related-link');
+  if(relatedLink){
+    scrollToCard(relatedLink.dataset.relatedId);
+    return;
+  }
+
   const btn = e.target.closest('.icon-btn');
   if(!btn) return;
   const id = String(btn.dataset.id);
@@ -675,8 +801,57 @@ feedEl.addEventListener('click', e=>{
   }
 });
 
+// --- Onboarding (first visit only) ------------------------------------------
+function renderOnboardBody(){
+  const body = document.getElementById('onboardBody');
+  body.innerHTML = Object.entries(CATEGORY_HEADINGS).map(([catKey, heading])=>{
+    const options = SUBCATEGORY_LABELS[catKey] || {};
+    const chips = Object.entries(options).map(([slug,label])=>
+      `<button class="interest-chip" data-cat="${catKey}" data-slug="${slug}">${label}</button>`
+    ).join('');
+    return `<div class="interest-group"><h3>${heading}</h3><div class="interest-chips">${chips}</div></div>`;
+  }).join('');
+}
+
+document.getElementById('onboardBody').addEventListener('click', (e)=>{
+  const chip = e.target.closest('.interest-chip');
+  if(!chip) return;
+  const cat = chip.dataset.cat, slug = chip.dataset.slug;
+  if(!interestDraft[cat]) interestDraft[cat] = [];
+  const idx = interestDraft[cat].indexOf(slug);
+  if(idx > -1) interestDraft[cat].splice(idx, 1);
+  else interestDraft[cat].push(slug);
+  chip.classList.toggle('selected');
+});
+
+function closeOnboarding(){
+  document.getElementById('onboardModal').classList.remove('show');
+  try{ localStorage.setItem('studybrief_onboarded', '1'); }catch(e){}
+}
+
+document.getElementById('finishOnboard').addEventListener('click', ()=>{
+  selectedInterests = interestDraft;
+  saveInterestsToStorage();
+  updateCustomizeBadge();
+  closeOnboarding();
+  render();
+});
+
+document.getElementById('skipOnboard').addEventListener('click', closeOnboarding);
+
+function maybeShowOnboarding(){
+  let alreadyOnboarded = false;
+  try{ alreadyOnboarded = !!localStorage.getItem('studybrief_onboarded'); }catch(e){}
+  if(alreadyOnboarded) return;
+  interestDraft = {};
+  renderOnboardBody();
+  document.getElementById('onboardModal').classList.add('show');
+}
+
 updateCustomizeBadge();
 render();
+maybeShowOnboarding();
+markVisitedNow();
 loadLive();
 </script>
 </body>

@@ -223,11 +223,16 @@ Rewrite the following news into:
 3. A subcategory tag — pick EXACTLY ONE value from this list that best
    matches the story: {subcategory_options}
    If truly nothing fits, use null.
+4. A deadline — if the story mentions a specific "last date to apply",
+   "closing date", "apply by" date, or similar application/registration
+   deadline, extract it as YYYY-MM-DD. If no such deadline is mentioned
+   (e.g. it's a results announcement, general news, or a syllabus), use
+   null. Never guess a date that isn't explicitly stated.
 
 Keep all facts accurate. No opinions. No fluff. Output ONLY valid JSON in
 this exact format, nothing else:
 
-{{"headline": "...", "summary": "...", "subcategory": "..."}}
+{{"headline": "...", "summary": "...", "subcategory": "...", "deadline": "..."}}
 
 Original title: {title}
 Original content: {content}
@@ -250,12 +255,19 @@ def rewrite_with_ai(title, raw_text, category):
         result = json.loads(text)
     except json.JSONDecodeError:
         # fallback: keep original if the model didn't return clean JSON
-        return {"headline": title, "summary": raw_text[:400], "subcategory": None}
+        return {"headline": title, "summary": raw_text[:400], "subcategory": None, "deadline": None}
 
     # Guard against a hallucinated tag that isn't in our approved list —
     # better to leave it untagged than store a made-up category.
     if result.get("subcategory") not in options:
         result["subcategory"] = None
+
+    # Sanity-check the deadline format — reject anything that isn't a
+    # clean YYYY-MM-DD, rather than storing a malformed date.
+    deadline = result.get("deadline")
+    if deadline and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(deadline)):
+        result["deadline"] = None
+
     return result
 
 
@@ -275,6 +287,7 @@ def build_card(article):
         "thumbnail_url": thumbnail,
         "source_link": article["link"],
         "published": article["published"],
+        "deadline": ai_result.get("deadline"),
     }
 
 
@@ -297,6 +310,7 @@ def push_to_api(cards):
             "thumbnail_url": c["thumbnail_url"],
             "source_link": c["source_link"],
             "published_at": c["published"],
+            "deadline": c.get("deadline"),
         }
         for c in cards
     ]
