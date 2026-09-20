@@ -47,7 +47,7 @@ app = FastAPI(title="Educational News API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],   # lock this down to your real app's domain before going live
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 

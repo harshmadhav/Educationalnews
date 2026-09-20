@@ -538,7 +538,8 @@ listEl.addEventListener('click', async (e)=>{
       });
     }
   }catch(err){
-    alert("Action failed — check your connection and try again.");
+    alert(`Action failed: ${err.message}\n\nCheck the browser console (F12) for more detail.`);
+    console.error("Admin action failed:", err);
   }
   btn.disabled = false;
 
