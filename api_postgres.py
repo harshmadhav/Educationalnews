@@ -106,6 +106,7 @@ class NewsCardEdit(BaseModel):
     headline: Optional[str] = None
     summary: Optional[str] = None
     thumbnail_url: Optional[str] = None
+    category: Optional[str] = None
     subcategory: Optional[str] = None
     deadline: Optional[str] = None
 

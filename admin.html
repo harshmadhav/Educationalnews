@@ -70,6 +70,12 @@
   .upload-label{ cursor:pointer; }
   .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;}
   .tag{ font-size:.72rem; font-weight:600; color:var(--meta); text-transform:none; }
+  .category-select{
+    font-size:.78rem; font-weight:700; color:var(--ink); background:var(--paper);
+    border:1px solid var(--line); border-radius:14px; padding:4px 10px;
+    font-family:'Inter',sans-serif;
+  }
+  .source-domain-note{ font-size:.75rem; color:var(--meta); padding-top:5px; }
   .subcat-select{
     width:100%; font-size:.82rem; color:var(--ink); background:var(--paper);
     border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:10px;
@@ -242,6 +248,13 @@ const CATS = {
   courses:            { color: "#F2A93B" },
 };
 
+const CATEGORY_LABELS = {
+  competitive_exams: "Exam",
+  govt_jobs: "Govt Job",
+  private_jobs: "Pvt Job",
+  courses: "Course",
+};
+
 const SUBCATEGORY_LABELS = {
   competitive_exams: {
     engineering_entrance: "Engineering Entrance", medical_entrance: "Medical Entrance",
@@ -398,7 +411,12 @@ function render(cards){
         <button class="btn-text yt-fetch-btn" type="button">Fetch thumbnail from video link</button>
       </div>
       <div class="card-top">
-        <span class="tag">${c.category} · ${c.source_domain || ''}</span>
+        <select class="category-select" data-field="category">
+          ${Object.entries(CATEGORY_LABELS).map(([slug,label])=>
+            `<option value="${slug}" ${c.category===slug?'selected':''}>${label}</option>`
+          ).join('')}
+        </select>
+        <span class="source-domain-note">${c.source_domain || ''}</span>
       </div>
       <select class="subcat-select" data-field="subcategory">
         <option value="">— No sub-interest tag —</option>
@@ -434,10 +452,24 @@ function render(cards){
       : thumbArt(category);
   }
 
+  listEl.querySelectorAll('.category-select').forEach(select => {
+    select.addEventListener('change', () => {
+      const cardEl = select.closest('.card');
+      const newCategory = select.value;
+      const subcatSelect = cardEl.querySelector('.subcat-select');
+      const options = SUBCATEGORY_LABELS[newCategory] || {};
+      // Category changed — the old sub-interest tag likely doesn't belong
+      // to the new category's list, so reset it rather than keep a
+      // mismatched value.
+      subcatSelect.innerHTML = `<option value="">— No sub-interest tag —</option>` +
+        Object.entries(options).map(([slug,label])=>`<option value="${slug}">${label}</option>`).join('');
+    });
+  });
+
   listEl.querySelectorAll('.thumb-url-input').forEach(input => {
     input.addEventListener('input', () => {
       const cardEl = input.closest('.card');
-      const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
+      const category = cardEl.querySelector('.category-select').value;
       refreshThumbPreview(cardEl, category, input.value.trim());
     });
   });
@@ -447,7 +479,7 @@ function render(cards){
       const file = e.target.files[0];
       if(!file) return;
       const cardEl = fileInput.closest('.card');
-      const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
+      const category = cardEl.querySelector('.category-select').value;
       const urlInput = cardEl.querySelector('.thumb-url-input');
       try{
         const dataUrl = await resizeImageFile(file);
@@ -462,7 +494,7 @@ function render(cards){
   listEl.querySelectorAll('.yt-fetch-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const cardEl = btn.closest('.card');
-      const category = cardEl.querySelector('.tag').textContent.split(' · ')[0];
+      const category = cardEl.querySelector('.category-select').value;
       const urlInput = cardEl.querySelector('.thumb-url-input');
       const sourceLink = cardEl.querySelector('.meta a').href;
       const ytThumb = getYouTubeThumbnail(sourceLink);
@@ -542,13 +574,25 @@ listEl.addEventListener('click', async (e)=>{
       const headline = cardEl.querySelector('[data-field=headline]').value;
       const summary = cardEl.querySelector('[data-field=summary]').value;
       const thumbnail_url = cardEl.querySelector('[data-field=thumbnail_url]').value.trim() || null;
+      const category = cardEl.querySelector('[data-field=category]').value;
       const subcategory = cardEl.querySelector('[data-field=subcategory]').value || null;
       const deadline = cardEl.querySelector('[data-field=deadline]').value || null;
-      await fetch(`${API_BASE}/api/admin/news/${id}`, {
+      const saveRes = await fetch(`${API_BASE}/api/admin/news/${id}`, {
         method:'PATCH',
         headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
-        body: JSON.stringify({ headline, summary, thumbnail_url, subcategory, deadline })
+        body: JSON.stringify({ headline, summary, thumbnail_url, category, subcategory, deadline })
       });
+      if(!saveRes.ok){
+        const errText = await saveRes.text();
+        throw new Error(`Server rejected the save (${saveRes.status}): ${errText}`);
+      }
+      const saved = await saveRes.json();
+      if(saved.category !== category){
+        alert(`Warning: server kept the category as "${saved.category}" instead of "${category}" — check for a typo or constraint issue.`);
+      }else{
+        alert("Saved.");
+      }
+      loadQueue(); // reload from the server so what you see matches what's actually stored
     }
   }catch(err){
     alert(`Action failed: ${err.message}\n\nCheck the browser console (F12) for more detail.`);
