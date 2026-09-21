@@ -383,7 +383,9 @@ def run_pipeline():
     if EMPLOYMENT_NEWS_SCRAPER_AVAILABLE:
         print("Fetching: Employment News job highlights ...")
         try:
-            all_articles.extend(fetch_employment_news_articles())
+            en_articles = fetch_employment_news_articles()
+            print(f"  Found {len(en_articles)} job highlight(s) from Employment News.")
+            all_articles.extend(en_articles)
         except Exception as e:
             print(f"  Employment News scraper failed, continuing without it: {e}")
     else:
