@@ -24,7 +24,7 @@ RUN:
 The table is created automatically on startup, using schema_postgres.sql.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 import os
 from contextlib import contextmanager
 from typing import Optional, List
@@ -92,7 +92,8 @@ class NewsCardIn(BaseModel):
     is_original: bool = False
     is_sponsored: bool = False
     sponsor_name: Optional[str] = None
-    deadline: Optional[str] = None  # ISO date string, e.g. "2026-10-15"
+    deadline: Optional[date] = None  # accepts "2026-10-15" as input,
+                                      # serializes correctly either way
 
 
 class NewsCardOut(NewsCardIn):
@@ -108,7 +109,7 @@ class NewsCardEdit(BaseModel):
     thumbnail_url: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
-    deadline: Optional[str] = None
+    deadline: Optional[date] = None
 
 
 def verify_admin(x_admin_token: str = Header(...)):
