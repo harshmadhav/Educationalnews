@@ -262,7 +262,7 @@ def list_custom_subcategories():
 def add_custom_subcategory(item: CustomSubcategoryIn):
     """Adds a new sub-interest tag for a category. Safe to call more than
     once with the same slug — it just won't create a duplicate."""
-    valid_categories = {"competitive_exams", "govt_jobs", "private_jobs", "courses"}
+    valid_categories = {"competitive_exams", "govt_jobs", "private_jobs", "courses", "news"}
     if item.category not in valid_categories:
         raise HTTPException(status_code=400, detail=f"Invalid category: {item.category}")
 

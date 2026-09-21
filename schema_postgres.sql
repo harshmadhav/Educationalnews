@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS news_cards (
                             'competitive_exams',
                             'govt_jobs',
                             'private_jobs',
-                            'courses'
+                            'courses',
+                            'news'
                         )
                     ),
 
@@ -83,7 +84,7 @@ CREATE TABLE IF NOT EXISTS custom_subcategories (
     category    TEXT NOT NULL CHECK (
                     category IN (
                         'competitive_exams', 'govt_jobs',
-                        'private_jobs', 'courses'
+                        'private_jobs', 'courses', 'news'
                     )
                 ),
     slug        TEXT NOT NULL,
@@ -91,6 +92,19 @@ CREATE TABLE IF NOT EXISTS custom_subcategories (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (category, slug)
 );
+
+-- Migration for databases created before "news" was a valid category —
+-- Postgres CHECK constraints can't be altered directly, so drop and
+-- recreate them. Safe to run every startup: DROP...IF EXISTS does
+-- nothing if it's already gone, and this widens the allowed set
+-- without touching any existing row's data.
+ALTER TABLE news_cards DROP CONSTRAINT IF EXISTS news_cards_category_check;
+ALTER TABLE news_cards ADD CONSTRAINT news_cards_category_check
+    CHECK (category IN ('competitive_exams','govt_jobs','private_jobs','courses','news'));
+
+ALTER TABLE custom_subcategories DROP CONSTRAINT IF EXISTS custom_subcategories_category_check;
+ALTER TABLE custom_subcategories ADD CONSTRAINT custom_subcategories_category_check
+    CHECK (category IN ('competitive_exams','govt_jobs','private_jobs','courses','news'));
 
 
 -- ============================================================

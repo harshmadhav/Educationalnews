@@ -219,17 +219,37 @@ SUBCATEGORY_OPTIONS = {
         "healthcare_pharma", "media_content", "hospitality_pvt",
         "consulting", "internships",
     ],
+    "news": [
+        "policy_updates", "results_analysis", "career_trends",
+        "success_stories", "opinion_commentary", "sector_trends",
+    ],
 }
 
 REWRITE_PROMPT = """You are a news editor for a student and job-seeker audience.
 
+This story was originally filed under the "{original_category}" category.
+
 Rewrite the following news into:
 1. A short, clear headline (max 12 words)
 2. A summary of exactly around 100 words, in simple professional English
-3. A subcategory tag — pick EXACTLY ONE value from this list that best
-   matches the story: {subcategory_options}
+3. The best category for this story — choose ONE:
+   - "{original_category}" — keep it here ONLY if this is a specific,
+     actionable notification someone would apply to or act on: a
+     particular exam's dates, a specific job vacancy, a course
+     admission window, or a results declaration relevant to applicants.
+   - "news" — use this instead if the story is general educational or
+     career news, analysis, opinion, a human-interest story, or
+     commentary that isn't a specific notification to act on (e.g.
+     "why selection rates are low", "a coaching culture debate", "a
+     candidate's inspiring story"). When in doubt between the two,
+     prefer "news" — only use "{original_category}" when there's a
+     clear, specific thing to apply for.
+4. A subcategory tag — pick EXACTLY ONE value from the list matching
+   whichever category you chose in step 3:
+   - If you chose "{original_category}": {original_subcategory_options}
+   - If you chose "news": {news_subcategory_options}
    If truly nothing fits, use null.
-4. A deadline — if the story mentions a specific "last date to apply",
+5. A deadline — if the story mentions a specific "last date to apply",
    "closing date", "apply by" date, or similar application/registration
    deadline, extract it as YYYY-MM-DD. If no such deadline is mentioned
    (e.g. it's a results announcement, general news, or a syllabus), use
@@ -238,17 +258,20 @@ Rewrite the following news into:
 Keep all facts accurate. No opinions. No fluff. Output ONLY valid JSON in
 this exact format, nothing else:
 
-{{"headline": "...", "summary": "...", "subcategory": "...", "deadline": "..."}}
+{{"headline": "...", "summary": "...", "category": "...", "subcategory": "...", "deadline": "..."}}
 
 Original title: {title}
 Original content: {content}
 """
 
 def rewrite_with_ai(title, raw_text, category):
-    options = SUBCATEGORY_OPTIONS.get(category, [])
+    original_options = SUBCATEGORY_OPTIONS.get(category, [])
+    news_options = SUBCATEGORY_OPTIONS.get("news", [])
     prompt = REWRITE_PROMPT.format(
         title=title, content=raw_text,
-        subcategory_options=", ".join(options),
+        original_category=category,
+        original_subcategory_options=", ".join(original_options),
+        news_subcategory_options=", ".join(news_options),
     )
     response = client.messages.create(
         model="claude-sonnet-4-6",
@@ -261,11 +284,18 @@ def rewrite_with_ai(title, raw_text, category):
         result = json.loads(text)
     except json.JSONDecodeError:
         # fallback: keep original if the model didn't return clean JSON
-        return {"headline": title, "summary": raw_text[:400], "subcategory": None, "deadline": None}
+        return {"headline": title, "summary": raw_text[:400],
+                "category": category, "subcategory": None, "deadline": None}
 
-    # Guard against a hallucinated tag that isn't in our approved list —
-    # better to leave it untagged than store a made-up category.
-    if result.get("subcategory") not in options:
+    # Guard against a hallucinated category — the AI may only choose the
+    # story's original category or "news", nothing else.
+    if result.get("category") not in (category, "news"):
+        result["category"] = category
+
+    # Validate the subcategory against whichever category was actually
+    # chosen — better to leave it untagged than store a mismatched tag.
+    valid_options = SUBCATEGORY_OPTIONS.get(result["category"], [])
+    if result.get("subcategory") not in valid_options:
         result["subcategory"] = None
 
     # Sanity-check the deadline format — reject anything that isn't a
@@ -286,7 +316,7 @@ def build_card(article):
     thumbnail = get_thumbnail(article["link"])
 
     return {
-        "category": article["category"],
+        "category": ai_result.get("category", article["category"]),
         "subcategory": ai_result.get("subcategory"),
         "headline": ai_result["headline"],
         "summary": ai_result["summary"],
