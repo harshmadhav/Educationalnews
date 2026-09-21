@@ -29,6 +29,12 @@ try:
 except ImportError:
     NTA_SCRAPER_AVAILABLE = False
 
+try:
+    from employment_news_scraper import fetch_employment_news_articles
+    EMPLOYMENT_NEWS_SCRAPER_AVAILABLE = True
+except ImportError:
+    EMPLOYMENT_NEWS_SCRAPER_AVAILABLE = False
+
 # ---------------------------------------------------------------------
 # 1. CONFIG — add/remove feeds per category
 # ---------------------------------------------------------------------
@@ -371,6 +377,18 @@ def run_pipeline():
     else:
         print("nta_scraper.py not found — skipping NTA sources "
               "(place it in the same folder to enable them).")
+
+    # Also pull real job postings from Employment News's Job Highlights
+    # table, if the scraper module is present alongside this script.
+    if EMPLOYMENT_NEWS_SCRAPER_AVAILABLE:
+        print("Fetching: Employment News job highlights ...")
+        try:
+            all_articles.extend(fetch_employment_news_articles())
+        except Exception as e:
+            print(f"  Employment News scraper failed, continuing without it: {e}")
+    else:
+        print("employment_news_scraper.py not found — skipping Employment "
+              "News (place it in the same folder to enable it).")
 
     # Step 2: remove duplicates across all categories/sources
     unique_articles = deduplicate_articles(all_articles)
