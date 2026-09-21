@@ -368,8 +368,10 @@ def reject_card(card_id: int):
            dependencies=[Depends(verify_admin)])
 def edit_card(card_id: int, edit: NewsCardEdit):
     """Fix an AI mistake (wrong date, awkward wording, etc.) before approving.
-    Only send the fields you want to change."""
-    fields = {k: v for k, v in edit.dict().items() if v is not None}
+    Only send the fields you want to change. A field explicitly sent as
+    null (e.g. clearing the subcategory to "None") DOES clear it — only
+    fields left out of the request entirely are left untouched."""
+    fields = edit.dict(exclude_unset=True)
     if not fields:
         raise HTTPException(status_code=400, detail="Nothing to update")
 
