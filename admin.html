@@ -37,6 +37,12 @@
     font-family:inherit;
   }
   .status-tab.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .admin-search{
+    width:100%; max-width:400px; margin-top:12px; font-size:.88rem; color:var(--ink);
+    background:var(--paper-dim); border:1px solid var(--line); border-radius:18px;
+    padding:8px 14px; font-family:'Inter',sans-serif; box-sizing:border-box;
+  }
+  .admin-search:focus{ outline:none; border-color:var(--ink); background:var(--paper); }
   input[type=password], input[type=text]{
     font-family:inherit; font-size:.85rem; padding:7px 10px; border-radius:8px;
     border:1px solid var(--line); background:var(--paper-dim); color:var(--ink); width:200px;
@@ -172,6 +178,7 @@
     <button class="status-tab" data-status="published">Published</button>
     <button class="status-tab" data-status="archived">Archived</button>
   </div>
+  <input type="text" id="adminSearch" class="admin-search" placeholder="Search headline or summary...">
 </header>
 
 <div class="modal-overlay" id="composeModal">
@@ -438,6 +445,7 @@ document.getElementById('statusTabs').addEventListener('click', (e)=>{
 });
 
 let currentStatus = 'draft';
+let allCards = [];
 
 async function loadQueue(){
   API_BASE = document.getElementById('apiBase').value.trim().replace(/\/$/,'');
@@ -463,11 +471,22 @@ async function loadQueue(){
     }
     if(!res.ok) throw new Error(`Server returned ${res.status}`);
     const cards = await res.json();
-    render(cards);
+    allCards = cards;
+    applySearchFilter();
   }catch(err){
     listEl.innerHTML = `<p class="empty">Couldn't reach the API. Check the base URL and that your server is running.</p>`;
   }
 }
+
+function applySearchFilter(){
+  const query = document.getElementById('adminSearch').value.trim().toLowerCase();
+  const filtered = !query ? allCards : allCards.filter(c =>
+    c.headline.toLowerCase().includes(query) || c.summary.toLowerCase().includes(query)
+  );
+  render(filtered);
+}
+
+document.getElementById('adminSearch').addEventListener('input', applySearchFilter);
 
 function statusCountLabel(n){
   const noun = currentStatus === 'draft' ? 'awaiting review'
@@ -512,6 +531,7 @@ function render(cards){
         ${buildSubcatOptionsHTML(c.category, c.subcategory)}
       </select>
       <label class="deadline-inline-label">Deadline <input type="date" class="deadline-input" data-field="deadline" value="${c.deadline || ''}"></label>
+      <label class="deadline-inline-label">Published <input type="date" class="deadline-input" data-field="published_at" value="${toDateInputValue(c.published_at)}"></label>
       <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
       <textarea data-field="summary">${c.summary}</textarea>
       <p class="meta"><a href="${c.source_link}" target="_blank" rel="noopener">View original source ↗</a></p>
@@ -598,6 +618,13 @@ function render(cards){
   });
 }
 
+function toDateInputValue(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr);
+  if(isNaN(d.getTime())) return ''; // unparseable — leave the field blank rather than guess
+  return d.toISOString().slice(0, 10);
+}
+
 function escapeAttr(s){
   return (s || "").replace(/"/g, "&quot;");
 }
@@ -667,10 +694,11 @@ listEl.addEventListener('click', async (e)=>{
       const category = cardEl.querySelector('[data-field=category]').value;
       const subcategory = cardEl.querySelector('[data-field=subcategory]').value || null;
       const deadline = cardEl.querySelector('[data-field=deadline]').value || null;
+      const published_at = cardEl.querySelector('[data-field=published_at]').value || null;
       const saveRes = await fetch(`${API_BASE}/api/admin/news/${id}`, {
         method:'PATCH',
         headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
-        body: JSON.stringify({ headline, summary, thumbnail_url, category, subcategory, deadline })
+        body: JSON.stringify({ headline, summary, thumbnail_url, category, subcategory, deadline, published_at })
       });
       if(!saveRes.ok){
         const errText = await saveRes.text();

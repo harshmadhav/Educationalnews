@@ -110,6 +110,7 @@ class NewsCardEdit(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     deadline: Optional[date] = None
+    published_at: Optional[str] = None
 
 
 def verify_admin(x_admin_token: str = Header(...)):
