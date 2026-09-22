@@ -18,6 +18,7 @@ SETUP:
 """
 
 import re
+import hashlib
 from datetime import date
 import requests
 from bs4 import BeautifulSoup
@@ -112,10 +113,21 @@ def fetch_employment_news_articles(category="govt_jobs", limit=30):
             f"Candidates should check the official notification for full "
             f"eligibility criteria before applying."
         )
+        # Every vacancy points to the same listing page (there are no
+        # individual job pages on this site) — but the database requires
+        # each story's link to be unique. A URL fragment is harmless
+        # (browsers ignore it when loading the page) but makes each
+        # vacancy's link distinct, so real duplicates still get caught
+        # while genuinely different jobs don't get silently dropped.
+        unique_id = hashlib.md5(
+            f"{row['organisation']}|{row['post']}|{row['last_date']}".encode()
+        ).hexdigest()[:10]
+        link = f"{ALL_JOBS_URL}#{unique_id}"
+
         articles.append({
             "category": category,
             "title": title,
-            "link": ALL_JOBS_URL,
+            "link": link,
             "raw_summary": raw_summary,
             "published": "",
         })
