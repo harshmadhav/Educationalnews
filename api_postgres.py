@@ -94,6 +94,11 @@ class NewsCardIn(BaseModel):
     sponsor_name: Optional[str] = None
     deadline: Optional[date] = None  # accepts "2026-10-15" as input,
                                       # serializes correctly either way
+    eligibility: Optional[str] = None
+    age_limit: Optional[str] = None
+    application_fee: Optional[str] = None
+    how_to_apply: Optional[str] = None
+    state: Optional[str] = None
 
 
 class NewsCardOut(NewsCardIn):
@@ -111,6 +116,11 @@ class NewsCardEdit(BaseModel):
     subcategory: Optional[str] = None
     deadline: Optional[date] = None
     published_at: Optional[str] = None
+    eligibility: Optional[str] = None
+    age_limit: Optional[str] = None
+    application_fee: Optional[str] = None
+    how_to_apply: Optional[str] = None
+    state: Optional[str] = None
 
 
 def verify_admin(x_admin_token: str = Header(...)):
@@ -184,13 +194,16 @@ def add_news_item(card: NewsCardIn):
                     INSERT INTO news_cards
                         (category, subcategory, headline, summary, thumbnail_url,
                          source_link, source_domain, published_at, is_original,
-                         is_sponsored, sponsor_name)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         is_sponsored, sponsor_name, deadline, eligibility,
+                         age_limit, application_fee, how_to_apply, state)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (card.category, card.subcategory, card.headline, card.summary,
                      card.thumbnail_url, card.source_link, domain,
                      card.published_at, card.is_original, card.is_sponsored,
-                     card.sponsor_name),
+                     card.sponsor_name, card.deadline, card.eligibility,
+                     card.age_limit, card.application_fee, card.how_to_apply,
+                     card.state),
                 )
                 conn.commit()
             except pg_errors.UniqueViolation:
@@ -223,12 +236,15 @@ def add_news_bulk(cards: List[NewsCardIn]):
                         """
                         INSERT INTO news_cards
                             (category, subcategory, headline, summary, thumbnail_url,
-                             source_link, source_domain, published_at, deadline)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             source_link, source_domain, published_at, deadline,
+                             eligibility, age_limit, application_fee, how_to_apply, state)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (card.category, card.subcategory, card.headline, card.summary,
                          card.thumbnail_url, card.source_link, domain,
-                         card.published_at, card.deadline),
+                         card.published_at, card.deadline, card.eligibility,
+                         card.age_limit, card.application_fee, card.how_to_apply,
+                         card.state),
                     )
                     conn.commit()
                     added += 1

@@ -192,6 +192,16 @@ def get_thumbnail(url, timeout=8):
 # Fine-grained interest tags per category. The AI picks ONE of these per
 # story (from the list matching that story's category) so the app can
 # offer a "Customize" filter within each broad category.
+INDIAN_STATES = [
+    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+    "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+    "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+    "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim",
+    "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
+    "West Bengal", "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry",
+    "Chandigarh",
+]
+
 SUBCATEGORY_OPTIONS = {
     "competitive_exams": [
         "engineering_entrance", "medical_entrance", "pg_research",
@@ -254,11 +264,32 @@ Rewrite the following news into:
    deadline, extract it as YYYY-MM-DD. If no such deadline is mentioned
    (e.g. it's a results announcement, general news, or a syllabus), use
    null. Never guess a date that isn't explicitly stated.
+6. Eligibility — if the story explicitly states an eligibility
+   requirement (degree, subject, experience, etc.), summarize it in
+   under 15 words. If not stated, use null.
+7. Age limit — if the story explicitly states an age requirement,
+   give it in under 12 words (e.g. "18-27 years, relaxation for
+   reserved categories"). If not stated, use null.
+8. Application fee — if the story explicitly states a fee amount,
+   give it in under 12 words. If not stated, use null.
+9. How to apply — if the story explicitly states an application
+   method (a website, portal, or process), summarize it in under 15
+   words. If not stated, use null.
+10. State — if this is specific to ONE Indian state or UT (e.g. a
+    State PSC notice, a state government job, a state board exam),
+    give the exact state name from this list: {state_options}
+    If it's a central/all-India notice, or doesn't clearly belong to
+    one specific state, use null. Never guess.
+
+For 6-9: only extract what's explicitly stated in the text. Never
+infer, estimate, or guess a typical value — leave it null if it isn't
+actually there. These will be shown to readers as factual, so
+accuracy matters more than completeness.
 
 Keep all facts accurate. No opinions. No fluff. Output ONLY valid JSON in
 this exact format, nothing else:
 
-{{"headline": "...", "summary": "...", "category": "...", "subcategory": "...", "deadline": "..."}}
+{{"headline": "...", "summary": "...", "category": "...", "subcategory": "...", "deadline": "...", "eligibility": "...", "age_limit": "...", "application_fee": "...", "how_to_apply": "...", "state": "..."}}
 
 Original title: {title}
 Original content: {content}
@@ -272,10 +303,11 @@ def rewrite_with_ai(title, raw_text, category):
         original_category=category,
         original_subcategory_options=", ".join(original_options),
         news_subcategory_options=", ".join(news_options),
+        state_options=", ".join(INDIAN_STATES),
     )
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=400,
+        max_tokens=500,
         messages=[{"role": "user", "content": prompt}],
     )
     text = response.content[0].text.strip()
@@ -285,7 +317,9 @@ def rewrite_with_ai(title, raw_text, category):
     except json.JSONDecodeError:
         # fallback: keep original if the model didn't return clean JSON
         return {"headline": title, "summary": raw_text[:400],
-                "category": category, "subcategory": None, "deadline": None}
+                "category": category, "subcategory": None, "deadline": None,
+                "eligibility": None, "age_limit": None,
+                "application_fee": None, "how_to_apply": None, "state": None}
 
     # Guard against a hallucinated category — the AI may only choose the
     # story's original category or "news", nothing else.
@@ -303,6 +337,19 @@ def rewrite_with_ai(title, raw_text, category):
     deadline = result.get("deadline")
     if deadline and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(deadline)):
         result["deadline"] = None
+
+    # Keep the four info-chip fields short — if the model ignored the
+    # word limits, truncate rather than store an oversized value.
+    for field, max_len in [("eligibility", 120), ("age_limit", 80),
+                            ("application_fee", 80), ("how_to_apply", 120)]:
+        value = result.get(field)
+        if value and len(str(value)) > max_len:
+            result[field] = str(value)[:max_len].rsplit(" ", 1)[0] + "…"
+
+    # Guard against a hallucinated state name — only accept an exact
+    # match from the approved list.
+    if result.get("state") not in INDIAN_STATES:
+        result["state"] = None
 
     return result
 
@@ -324,6 +371,11 @@ def build_card(article):
         "source_link": article["link"],
         "published": article["published"],
         "deadline": ai_result.get("deadline"),
+        "eligibility": ai_result.get("eligibility"),
+        "age_limit": ai_result.get("age_limit"),
+        "application_fee": ai_result.get("application_fee"),
+        "how_to_apply": ai_result.get("how_to_apply"),
+        "state": ai_result.get("state"),
     }
 
 
@@ -371,6 +423,11 @@ def push_to_api(cards):
             "source_link": c["source_link"],
             "published_at": c["published"],
             "deadline": c.get("deadline"),
+            "eligibility": c.get("eligibility"),
+            "age_limit": c.get("age_limit"),
+            "application_fee": c.get("application_fee"),
+            "how_to_apply": c.get("how_to_apply"),
+            "state": c.get("state"),
         }
         for c in cards
     ]

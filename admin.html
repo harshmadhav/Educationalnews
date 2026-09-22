@@ -95,6 +95,13 @@
     font-size:.82rem; color:var(--ink); background:var(--paper); border:1px solid var(--line);
     border-radius:6px; padding:5px 7px; font-family:'Inter',sans-serif;
   }
+  .chip-fields{
+    display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;
+  }
+  .chip-input{
+    font-size:.78rem; color:var(--ink); background:var(--paper); border:1px solid var(--line);
+    border-radius:6px; padding:6px 8px; font-family:'Inter',sans-serif; box-sizing:border-box;
+  }
   .headline{
     font-family:'Source Serif 4',serif; font-weight:700; font-size:1.1rem; margin:0 0 8px;
     width:100%; border:none; background:transparent; color:var(--ink); font-family:'Source Serif 4',serif;
@@ -212,6 +219,19 @@
       <label class="form-label">Application deadline <span class="form-hint">(optional — shows an urgency badge in the app)</span></label>
       <input type="date" id="composeDeadline" class="form-input">
 
+      <label class="form-label">Eligibility, age limit, fee, how to apply <span class="form-hint">(all optional)</span></label>
+      <div class="chip-fields">
+        <input class="chip-input" id="composeEligibility" placeholder="Eligibility">
+        <input class="chip-input" id="composeAgeLimit" placeholder="Age limit">
+        <input class="chip-input" id="composeFee" placeholder="Application fee">
+        <input class="chip-input" id="composeHowToApply" placeholder="How to apply">
+      </div>
+
+      <label class="form-label">State <span class="form-hint">(leave blank for central/all-India)</span></label>
+      <select id="composeState" class="form-input">
+        <option value="">— Central / all-India —</option>
+      </select>
+
       <label class="form-label">Thumbnail <span class="form-hint">(optional — leave blank to use the category icon)</span></label>
       <div class="compose-thumb-preview" id="composeThumbPreview"></div>
       <input type="text" id="composeThumbnail" class="form-input" placeholder="Paste an image URL...">
@@ -256,6 +276,16 @@ const CATS = {
   courses:            { color: "#F2A93B" },
   news:               { color: "#5B8FB9" },
 };
+
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+  "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+  "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim",
+  "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
+  "West Bengal", "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry",
+  "Chandigarh",
+];
 
 const CATEGORY_LABELS = {
   competitive_exams: "Exam",
@@ -431,6 +461,9 @@ const countEl = document.getElementById('count');
 
 // Remember the last-used values in this browser only (not sent anywhere).
 document.getElementById('apiBase').value = localStorage.getItem('sb_api_base') || "";
+document.getElementById('composeState').innerHTML =
+  `<option value="">— Central / all-India —</option>` +
+  INDIAN_STATES.map(s => `<option value="${s}">${s}</option>`).join('');
 document.getElementById('tokenInput').value = localStorage.getItem('sb_token') || "";
 
 document.getElementById('loadBtn').addEventListener('click', loadQueue);
@@ -532,6 +565,16 @@ function render(cards){
       </select>
       <label class="deadline-inline-label">Deadline <input type="date" class="deadline-input" data-field="deadline" value="${c.deadline || ''}"></label>
       <label class="deadline-inline-label">Published <input type="date" class="deadline-input" data-field="published_at" value="${toDateInputValue(c.published_at)}"></label>
+      <div class="chip-fields">
+        <input class="chip-input" data-field="eligibility" placeholder="Eligibility (blank if not stated)" value="${escapeAttr(c.eligibility || '')}">
+        <input class="chip-input" data-field="age_limit" placeholder="Age limit (blank if not stated)" value="${escapeAttr(c.age_limit || '')}">
+        <input class="chip-input" data-field="application_fee" placeholder="Application fee (blank if not stated)" value="${escapeAttr(c.application_fee || '')}">
+        <input class="chip-input" data-field="how_to_apply" placeholder="How to apply (blank if not stated)" value="${escapeAttr(c.how_to_apply || '')}">
+      </div>
+      <select class="chip-input" data-field="state" style="margin-bottom:10px">
+        <option value="">— Central / all-India (no specific state) —</option>
+        ${INDIAN_STATES.map(s => `<option value="${s}" ${c.state===s?'selected':''}>${s}</option>`).join('')}
+      </select>
       <input class="headline" value="${escapeAttr(c.headline)}" data-field="headline">
       <textarea data-field="summary">${c.summary}</textarea>
       <p class="meta"><a href="${c.source_link}" target="_blank" rel="noopener">View original source ↗</a></p>
@@ -695,10 +738,15 @@ listEl.addEventListener('click', async (e)=>{
       const subcategory = cardEl.querySelector('[data-field=subcategory]').value || null;
       const deadline = cardEl.querySelector('[data-field=deadline]').value || null;
       const published_at = cardEl.querySelector('[data-field=published_at]').value || null;
+      const eligibility = cardEl.querySelector('[data-field=eligibility]').value.trim() || null;
+      const age_limit = cardEl.querySelector('[data-field=age_limit]').value.trim() || null;
+      const application_fee = cardEl.querySelector('[data-field=application_fee]').value.trim() || null;
+      const how_to_apply = cardEl.querySelector('[data-field=how_to_apply]').value.trim() || null;
+      const state = cardEl.querySelector('[data-field=state]').value || null;
       const saveRes = await fetch(`${API_BASE}/api/admin/news/${id}`, {
         method:'PATCH',
         headers:{ "X-Admin-Token": TOKEN, "Content-Type":"application/json" },
-        body: JSON.stringify({ headline, summary, thumbnail_url, category, subcategory, deadline, published_at })
+        body: JSON.stringify({ headline, summary, thumbnail_url, category, subcategory, deadline, published_at, eligibility, age_limit, application_fee, how_to_apply, state })
       });
       if(!saveRes.ok){
         const errText = await saveRes.text();
@@ -794,6 +842,11 @@ function clearComposeForm(){
   document.getElementById('composeLink').value = '';
   document.getElementById('composeThumbnail').value = '';
   document.getElementById('composeDeadline').value = '';
+  document.getElementById('composeEligibility').value = '';
+  document.getElementById('composeAgeLimit').value = '';
+  document.getElementById('composeFee').value = '';
+  document.getElementById('composeHowToApply').value = '';
+  document.getElementById('composeState').value = '';
   document.getElementById('composeSponsored').checked = false;
   document.getElementById('composeAdvertiser').value = '';
   document.getElementById('advertiserFields').style.display = 'none';
@@ -812,6 +865,11 @@ async function submitComposedStory(publishImmediately){
   const source_link = document.getElementById('composeLink').value.trim();
   const thumbnail_url = document.getElementById('composeThumbnail').value.trim() || null;
   const deadline = document.getElementById('composeDeadline').value || null;
+  const eligibility = document.getElementById('composeEligibility').value.trim() || null;
+  const age_limit = document.getElementById('composeAgeLimit').value.trim() || null;
+  const application_fee = document.getElementById('composeFee').value.trim() || null;
+  const how_to_apply = document.getElementById('composeHowToApply').value.trim() || null;
+  const state = document.getElementById('composeState').value || null;
   const is_sponsored = document.getElementById('composeSponsored').checked;
   const sponsor_name = is_sponsored
     ? (document.getElementById('composeAdvertiser').value.trim() || null)
@@ -838,6 +896,7 @@ async function submitComposedStory(publishImmediately){
       body: JSON.stringify({
         category, subcategory, headline, summary, source_link, thumbnail_url,
         is_original: !is_sponsored, is_sponsored, sponsor_name, deadline,
+        eligibility, age_limit, application_fee, how_to_apply, state,
       }),
     });
     if(!createRes.ok) throw new Error(`Server returned ${createRes.status}`);

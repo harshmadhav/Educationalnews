@@ -30,6 +30,18 @@ CREATE TABLE IF NOT EXISTS news_cards (
     deadline        DATE,   -- last date to apply/appear, when the story
                             -- mentions one — drives the urgency badge
 
+    eligibility     TEXT,   -- e.g. "Bachelor's degree in any discipline"
+    age_limit       TEXT,   -- e.g. "18-27 years, relaxation for reserved categories"
+    application_fee TEXT,   -- e.g. "₹100 (General), exempt for SC/ST/PwD"
+    how_to_apply    TEXT,   -- e.g. "Apply online at ssc.nic.in"
+    -- All four above are extracted once by the AI when the story is
+    -- first processed — never generated live per reader, to keep cost
+    -- flat regardless of how many people read the story.
+
+    state           TEXT,   -- an Indian state/UT name, only when the story
+                            -- is specific to that state (e.g. a State PSC
+                            -- notice); null for central/all-India stories
+
     headline        TEXT NOT NULL,
     summary         TEXT NOT NULL,          -- AI-rewritten, ~100 words
 
@@ -69,6 +81,11 @@ ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS is_original BOOLEAN NOT NULL DEF
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS is_sponsored BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS sponsor_name TEXT;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS deadline DATE;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS eligibility TEXT;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS age_limit TEXT;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS application_fee TEXT;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS how_to_apply TEXT;
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS state TEXT;
 
 -- Fast filtering by subcategory (the "Customize" feature's main query)
 CREATE INDEX IF NOT EXISTS idx_news_subcategory

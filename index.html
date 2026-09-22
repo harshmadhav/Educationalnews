@@ -75,6 +75,13 @@
     color:var(--meta); padding:0 4px;
   }
   .modal-sub{ font-size:.85rem; color:var(--meta); margin:8px 0 16px; }
+  .form-label{ font-size:.8rem; font-weight:600; color:var(--ink); }
+  .form-hint{ font-weight:400; color:var(--meta); }
+  .state-select{
+    width:100%; font-size:.88rem; color:var(--ink); background:var(--paper-dim);
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:16px;
+    font-family:'Inter',sans-serif; box-sizing:border-box;
+  }
   .modal-body{ overflow-y:auto; flex:1; }
   .interest-group{ margin-bottom:18px; }
   .interest-group h3{
@@ -192,6 +199,21 @@
   .deadline-urgent{ background:var(--coral); color:#fff; }
   .deadline-soon{ background:var(--amber); color:var(--ink); }
   .deadline-normal{ background:var(--paper-dim); color:var(--meta); border:1px solid var(--line); }
+  .info-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; }
+  .info-chip{
+    font-size:.8rem; border:1px solid var(--line); border-radius:14px;
+    background:var(--paper-dim);
+  }
+  .info-chip summary{
+    padding:6px 12px; cursor:pointer; color:var(--ink); font-weight:600;
+    list-style:none; user-select:none;
+  }
+  .info-chip summary::-webkit-details-marker{ display:none; }
+  .info-chip summary::before{ content:"+ "; color:var(--meta); font-weight:400; }
+  .info-chip[open] summary::before{ content:"− "; }
+  .info-chip p{
+    margin:0; padding:0 12px 10px; font-size:.85rem; color:var(--ink); opacity:.85;
+  }
   .related-section{ margin-top:16px; padding-top:14px; border-top:1px dashed var(--line); }
   .related-title{
     font-size:.72rem; font-weight:700; color:var(--meta); text-transform:uppercase;
@@ -248,6 +270,8 @@
       <button class="modal-close" id="closeCustomize" aria-label="Close">&times;</button>
     </div>
     <p class="modal-sub">Pick the topics you care about within each category. Leave a category untouched to keep seeing everything in it.</p>
+    <label class="form-label" style="display:block;margin-bottom:6px;">Your state <span class="form-hint">(prioritizes state-specific jobs/exams — doesn't hide others)</span></label>
+    <select id="customizeStateSelect" class="state-select"></select>
     <div class="modal-body" id="customizeBody"></div>
     <div class="modal-footer">
       <button class="btn-text" id="clearInterests">Clear all filters</button>
@@ -262,6 +286,8 @@
       <h2>What are you preparing for?</h2>
     </div>
     <p class="modal-sub">Pick the topics you care about — your feed will focus on these. You can always change this later from "Customize".</p>
+    <label class="form-label" style="display:block;margin-bottom:6px;">Your state <span class="form-hint">(optional — prioritizes state-specific jobs/exams)</span></label>
+    <select id="onboardStateSelect" class="state-select"></select>
     <div class="modal-body" id="onboardBody"></div>
     <div class="modal-footer">
       <button class="btn-text" id="skipOnboard">Skip for now</button>
@@ -372,6 +398,19 @@ function formatPublished(pub){
   return `${datePart}, ${timePart}`;
 }
 
+function buildInfoChips(c){
+  const items = [
+    ['Eligibility', c.eligibility],
+    ['Age Limit', c.ageLimit],
+    ['Fee', c.applicationFee],
+    ['How to Apply', c.howToApply],
+  ].filter(([,val]) => val);
+  if(!items.length) return '';
+  return `<div class="info-chips">${items.map(([label,val]) =>
+    `<details class="info-chip"><summary>${label}</summary><p>${val}</p></details>`
+  ).join('')}</div>`;
+}
+
 function dateLabel(c){
   const pub = formatPublished(c.published);
   if(pub) return pub + ' · ';
@@ -458,6 +497,56 @@ async function loadCustomSubcategories(){
 
 const CATEGORY_HEADINGS = { exams: "Exam", courses: "Course", govt: "Govt Job", private: "Pvt Job", news: "News" };
 
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+  "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+  "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim",
+  "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
+  "West Bengal", "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry",
+  "Chandigarh",
+];
+
+// --- Your state (prioritizes matching state-specific stories) --------------
+let userState = '';
+try{ userState = localStorage.getItem('studybrief_state') || ''; }catch(e){}
+
+function saveUserState(newState){
+  userState = newState;
+  try{ localStorage.setItem('studybrief_state', newState); }catch(e){}
+}
+
+function statePriority(c){
+  if(!c.state) return 1;               // central/all-India — always relevant
+  if(c.state === userState) return 0;  // your state — highest priority
+  return 2;                            // a different specific state
+}
+
+// --- Implicit personalization (learns from what you actually read) --------
+// Tracks which categories/sub-interests you tap "Read More" on, and gently
+// nudges the "All" feed toward more of that — without hiding anything, and
+// without ever asking you to set it up. This runs alongside Customize, not
+// instead of it.
+let engagement = { cat: {}, sub: {} };
+try{
+  const saved = JSON.parse(localStorage.getItem('studybrief_engagement') || 'null');
+  if(saved) engagement = saved;
+}catch(e){}
+
+function recordEngagement(c){
+  engagement.cat[c.cat] = (engagement.cat[c.cat] || 0) + 1;
+  if(c.subcategory) engagement.sub[c.subcategory] = (engagement.sub[c.subcategory] || 0) + 1;
+  try{ localStorage.setItem('studybrief_engagement', JSON.stringify(engagement)); }catch(e){}
+}
+
+function engagementScore(c){
+  // Higher = more preferred. Subcategory match counts more than a
+  // broad category match, since it's a more specific signal.
+  const catScore = engagement.cat[c.cat] || 0;
+  const subScore = c.subcategory ? (engagement.sub[c.subcategory] || 0) * 3 : 0;
+  return catScore + subScore;
+}
+
 // --- Customize / interest filters (saved locally on this device) --------
 let selectedInterests = {};
 try{
@@ -476,8 +565,14 @@ function updateCustomizeBadge(){
     activeCount ? `Customize (${activeCount})` : 'Customize';
 }
 
+function populateStateSelect(selectEl, currentValue){
+  selectEl.innerHTML = `<option value="">— No specific state —</option>` +
+    INDIAN_STATES.map(s => `<option value="${s}" ${currentValue===s?'selected':''}>${s}</option>`).join('');
+}
+
 function openCustomizeModal(){
   interestDraft = JSON.parse(JSON.stringify(selectedInterests)); // work on a copy
+  populateStateSelect(document.getElementById('customizeStateSelect'), userState);
   const body = document.getElementById('customizeBody');
   body.innerHTML = Object.entries(CATEGORY_HEADINGS).map(([catKey, heading])=>{
     const options = SUBCATEGORY_LABELS[catKey] || {};
@@ -514,6 +609,7 @@ document.getElementById('customizeBody').addEventListener('click', (e)=>{
 document.getElementById('saveInterests').addEventListener('click', ()=>{
   selectedInterests = interestDraft;
   saveInterestsToStorage();
+  saveUserState(document.getElementById('customizeStateSelect').value);
   updateCustomizeBadge();
   closeCustomizeModal();
   render();
@@ -570,6 +666,11 @@ function mapApiCards(raw){
       isSponsored: !!item.is_sponsored,
       sponsorName: item.sponsor_name || null,
       deadline: item.deadline || null,
+      eligibility: item.eligibility || null,
+      ageLimit: item.age_limit || null,
+      applicationFee: item.application_fee || null,
+      howToApply: item.how_to_apply || null,
+      state: item.state || null,
     };
   });
 }
@@ -592,6 +693,7 @@ async function loadLive(){
       CARDS.push(...mapped);
       render();
       showToast(`Live: ${mapped.length} stories loaded`);
+      checkDueReminders();
     }
   }catch(err){
     showToast("Couldn't reach the live API — showing sample stories");
@@ -702,6 +804,80 @@ function downloadDeadlineToCalendar(c){
   URL.revokeObjectURL(a.href);
 }
 
+// --- Deadline reminders (browser notifications, fire when the app is
+// open near the deadline — not true background push) ----------------------
+let reminderIds = new Set();
+try{
+  reminderIds = new Set(JSON.parse(localStorage.getItem('studybrief_reminders') || '[]'));
+}catch(e){}
+
+function saveReminders(){
+  try{ localStorage.setItem('studybrief_reminders', JSON.stringify([...reminderIds])); }catch(e){}
+}
+
+function toggleReminder(c){
+  const id = String(c.id);
+  if(reminderIds.has(id)){
+    reminderIds.delete(id);
+    saveReminders();
+    showToast("Reminder removed");
+    render();
+    return;
+  }
+  if(!('Notification' in window)){
+    showToast("Your browser doesn't support notifications");
+    return;
+  }
+  if(Notification.permission === 'granted'){
+    reminderIds.add(id);
+    saveReminders();
+    showToast("We'll remind you as the deadline gets close");
+    render();
+  }else if(Notification.permission !== 'denied'){
+    Notification.requestPermission().then(perm => {
+      if(perm === 'granted'){
+        reminderIds.add(id);
+        saveReminders();
+        showToast("We'll remind you as the deadline gets close");
+        render();
+      }else{
+        showToast("Notifications blocked — enable them in your browser settings to use reminders");
+      }
+    });
+  }else{
+    showToast("Notifications are blocked for this site — enable them in your browser settings");
+  }
+}
+
+// Checks bookmarked reminders once per app load, and fires a browser
+// notification for any within 3 days of its deadline — at most once
+// per story per day, so reopening the app repeatedly doesn't spam you.
+function checkDueReminders(){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  let lastNotified = {};
+  try{ lastNotified = JSON.parse(localStorage.getItem('studybrief_reminder_log') || '{}'); }catch(e){}
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = today.toISOString().slice(0,10);
+
+  CARDS.forEach(c => {
+    const id = String(c.id);
+    if(!reminderIds.has(id) || !c.deadline) return;
+    if(lastNotified[id] === todayStr) return; // already notified today
+
+    const due = new Date(c.deadline + 'T00:00:00');
+    if(isNaN(due.getTime())) return;
+    const daysLeft = Math.round((due - today) / 86400000);
+    if(daysLeft < 0 || daysLeft > 3) return; // outside the reminder window
+
+    const text = daysLeft === 0 ? "Last day to apply!" : `${daysLeft} day${daysLeft>1?'s':''} left to apply`;
+    try{ new Notification(c.headline, { body: text, tag: `studybrief-${id}` }); }catch(e){}
+    lastNotified[id] = todayStr;
+  });
+
+  try{ localStorage.setItem('studybrief_reminder_log', JSON.stringify(lastNotified)); }catch(e){}
+}
+
 function shareCard(c){
   if(navigator.share){
     navigator.share({ title: c.headline, text: c.summary.slice(0,140)+'…', url: c.link })
@@ -794,6 +970,22 @@ function render(){
   }
   else visible = CARDS.filter(c=>c.cat===activeCat && matchesInterestFilter(c) && matchesSearch(c));
 
+  // Order within "All" / category tabs: your state's own stories first
+  // (if you've set one), then a gentle nudge toward categories/tags you
+  // actually tend to read — never hiding anything, just reordering.
+  if(activeCat==="all" || CATEGORY_HEADINGS[activeCat]){
+    visible = visible
+      .map((c, i) => ({c, i}))
+      .sort((a, b) => {
+        const stateDiff = userState ? (statePriority(a.c) - statePriority(b.c)) : 0;
+        if(stateDiff !== 0) return stateDiff;
+        const engagementDiff = engagementScore(b.c) - engagementScore(a.c); // higher first
+        if(engagementDiff !== 0) return engagementDiff;
+        return a.i - b.i; // stable — preserves recency order otherwise
+      })
+      .map(x => x.c);
+  }
+
   if(activeCat==="saved" && visible.length===0){
     feedEl.innerHTML = `<div class="empty-saved">No saved stories yet — tap the bookmark icon on any card to keep it here.</div>`;
     return;
@@ -835,12 +1027,13 @@ function render(){
         </div>
       </div>
       <p class="cat-label">${isNew ? '<span class="new-dot" title="New since your last visit"></span>' : ''}${c.tag}${c.isSponsored ? `<span class="ad-badge">Ad${c.sponsorName ? ' · '+c.sponsorName : ''}</span>` : (c.isOriginal ? ' <span class="original-badge">Original</span>' : '')}${isApplied ? ' <span class="applied-badge">Applied</span>' : ''}</p>
-      ${deadlineBadge(c) ? `<div>${deadlineBadge(c)} <button class="cal-link" data-action="calendar" data-id="${c.id}">+ Add to calendar</button></div>` : ''}
+      ${deadlineBadge(c) ? `<div>${deadlineBadge(c)} <button class="cal-link" data-action="calendar" data-id="${c.id}">+ Add to calendar</button> <button class="cal-link" data-action="remind" data-id="${c.id}">${reminderIds.has(String(c.id)) ? '🔔 Reminder on' : '🔕 Remind me'}</button></div>` : ''}
       <h2 class="headline">${c.headline}</h2>
       <p class="summary">${c.summary}</p>
+      ${buildInfoChips(c)}
       <div class="meta-row">
         <span class="meta-left">${dateLabel(c)}${c.source}</span>
-        <a class="source-link" href="${c.link}" target="_blank" rel="noopener">Read More</a>
+        <a class="source-link" href="${c.link}" target="_blank" rel="noopener" data-action="read-more" data-id="${c.id}">Read More</a>
       </div>
       ${related.length ? `
       <div class="related-section">
@@ -866,10 +1059,22 @@ feedEl.addEventListener('click', e=>{
     return;
   }
 
+  const readMoreLink = e.target.closest('[data-action="read-more"]');
+  if(readMoreLink){
+    const card = CARDS.find(c => String(c.id) === String(readMoreLink.dataset.id));
+    if(card) recordEngagement(card);
+    return; // let the link's normal href navigation proceed
+  }
+
   const calBtn = e.target.closest('.cal-link');
   if(calBtn){
     const card = CARDS.find(c => String(c.id) === String(calBtn.dataset.id));
-    if(card) downloadDeadlineToCalendar(card);
+    if(!card) return;
+    if(calBtn.dataset.action === 'remind'){
+      toggleReminder(card);
+    }else{
+      downloadDeadlineToCalendar(card);
+    }
     return;
   }
 
@@ -932,6 +1137,7 @@ function closeOnboarding(){
 document.getElementById('finishOnboard').addEventListener('click', ()=>{
   selectedInterests = interestDraft;
   saveInterestsToStorage();
+  saveUserState(document.getElementById('onboardStateSelect').value);
   updateCustomizeBadge();
   closeOnboarding();
   render();
@@ -945,6 +1151,7 @@ function maybeShowOnboarding(){
   if(alreadyOnboarded) return;
   interestDraft = {};
   renderOnboardBody();
+  populateStateSelect(document.getElementById('onboardStateSelect'), userState);
   document.getElementById('onboardModal').classList.add('show');
 }
 
