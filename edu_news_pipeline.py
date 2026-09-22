@@ -35,6 +35,12 @@ try:
 except ImportError:
     EMPLOYMENT_NEWS_SCRAPER_AVAILABLE = False
 
+try:
+    from private_jobs_scraper import fetch_private_job_articles
+    PRIVATE_JOBS_SCRAPER_AVAILABLE = True
+except ImportError:
+    PRIVATE_JOBS_SCRAPER_AVAILABLE = False
+
 # ---------------------------------------------------------------------
 # 1. CONFIG — add/remove feeds per category
 # ---------------------------------------------------------------------
@@ -478,6 +484,21 @@ def run_pipeline():
     else:
         print("employment_news_scraper.py not found — skipping Employment "
               "News (place it in the same folder to enable it).")
+
+    # Also pull private-sector job postings from Greenhouse's public
+    # Job Board API (see COMPANY_SLUGS in private_jobs_scraper.py),
+    # if the scraper module is present alongside this script.
+    if PRIVATE_JOBS_SCRAPER_AVAILABLE:
+        print("Fetching: Private jobs (Greenhouse) ...")
+        try:
+            pj_articles = fetch_private_job_articles()
+            print(f"  Found {len(pj_articles)} private job posting(s).")
+            all_articles.extend(pj_articles)
+        except Exception as e:
+            print(f"  Private jobs scraper failed, continuing without it: {e}")
+    else:
+        print("private_jobs_scraper.py not found — skipping private jobs "
+              "(place it in the same folder to enable it).")
 
     # Step 2: remove duplicates across all categories/sources
     unique_articles = deduplicate_articles(all_articles)
