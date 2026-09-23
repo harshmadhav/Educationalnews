@@ -17,7 +17,14 @@ CONFIRMED WORKING SLUGS: see COMPANY_SLUGS below.
 
     Tried and NOT on Greenhouse under these names (2026-09): meesho,
     cred, dreamplug, freshworks, browserstack, postman, hasura,
-    darwinbox, whatfix, phonepe, myntra.
+    darwinbox, whatfix, phonepe (board taken down), myntra, dezerv,
+    enzene, vymo, quadeye, podiuminfotech, go2andaman, ghx, modmed,
+    sila, forbesandcompany, berkadia, shubhashray, veeventures.
+
+    Valid boards with no Indian jobs right now (add if that changes):
+    rajasthanroyals, sadaindia, propstack, compassindia (all empty);
+    paypay (Japan), georgepjohnsonexperiencemarketing (US),
+    careeredge, valpro, trufru (US only).
 
 INDIA-ONLY FILTER:
     Only jobs located in India (or fully remote) are kept — see
@@ -42,11 +49,26 @@ import requests
 from bs4 import BeautifulSoup
 
 COMPANY_SLUGS = [
-    # All confirmed working 2026-09
+    # All confirmed working 2026-09. Counts are India/remote jobs at the
+    # time; global companies' foreign jobs are dropped by the filter below.
     "razorpaysoftwareprivatelimited",  # Razorpay
     "groww",                           # Groww
     "blenheimchalcotindia",            # Blenheim Chalcot India
-    "alphagrepsecurities",             # AlphaGrep Securities (also has China jobs — filtered out)
+    "alphagrepsecurities",             # AlphaGrep Securities (also has China jobs)
+    "inmobi",                          # InMobi (~42)
+    "glance",                          # Glance (~26)
+    "tripactions",                     # Navan, formerly TripActions (~17; mostly US/EU)
+    "gravitonresearchcapital",         # Graviton Research Capital (~14)
+    "kraftonindia",                    # KRAFTON India (~14)
+    "nksecuritiesresearch",            # NK Securities Research (~13)
+    "karya",                           # Karya (~13)
+    "taboola",                         # Taboola (~10; mostly Israel/US)
+    "acurussolutions",                 # Acurus (~7)
+    "twinhealth",                      # Twin Health (~6; mostly US)
+    "sumologic",                       # Sumo Logic (~5)
+    "kulficollective",                 # Kulfi Collective (~4)
+    "sonymusicentertainment",          # Sony Music (~3 in Mumbai; mostly US/UK)
+    "kimbal",                          # Kimbal (~2)
 ]
 
 API_BASE = "https://boards-api.greenhouse.io/v1/boards"

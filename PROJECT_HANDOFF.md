@@ -15,7 +15,10 @@ Local folder: `C:\Harsh\studybrief-app`.
 ```
 edu_news_pipeline.py     → runs every 3 hrs via GitHub Actions.
                             Fetches from all sources below, dedupes,
-                            AI-rewrites, pushes to the live database.
+                            skips stories already in the database,
+                            AI-rewrites the rest in ONE Batch API call
+                            (claude-sonnet-5, half price), pushes to
+                            the live database.
 
 nta_scraper.py            → NTA exam portals (JEE Main, NEET, CUET, UGC NET,
                              CSIR NET, CMAT, ICAR, NCHM JEE, NIFT, SWAYAM).
@@ -24,10 +27,17 @@ nta_scraper.py            → NTA exam portals (JEE Main, NEET, CUET, UGC NET,
 employment_news_scraper.py → employmentnews.gov.in "All Jobs" table.
                               Filters out already-expired postings.
 
-private_jobs_scraper.py   → Greenhouse public Job Board API.
-                             COMPANY_SLUGS list — currently just Razorpay
-                             (razorpaysoftwareprivatelimited), confirmed
-                             working. Add more slugs as you find them.
+private_jobs_scraper.py   → Greenhouse public Job Board API (free, no key).
+                             COMPANY_SLUGS: 18 verified companies
+                             (Razorpay, Groww, InMobi, Glance, Navan,
+                             KRAFTON India, Graviton, Karya, …) —
+                             ~187 India/remote jobs, ~500 foreign
+                             jobs dropped. Names tried that failed are
+                             listed in the file's docstring.
+                             is_india_or_remote() drops non-India jobs
+                             BEFORE the AI step (zero tokens spent on
+                             them). Source for more company names:
+                             TheirStack's list of Indian Greenhouse users.
 
 schema_postgres.sql       → Database schema + all migrations (see §2).
 
@@ -43,7 +53,8 @@ index.html                → The actual public-facing app. Published as a
                              deployment (Vercel/Netlify) to go fully live.
 ```
 
-**Data flow:** pipeline scrapes → AI rewrites → saves as `draft` →
+**Data flow:** pipeline scrapes → filters (India-only jobs, not already
+stored) → AI rewrites (batch) → saves as `draft` →
 you review in `admin.html` → approve → appears in `index.html`.
 
 ---
@@ -86,11 +97,20 @@ built-in list.
 - `GET /api/news` — the live feed. Filters: `category`, `subcategory`, `limit`, `offset`
 - `GET /api/subcategories` — merged custom tag list
 - `GET /api/health`
+- `POST /api/news/existing-links` — pipeline sends fetched links, gets back
+  the ones already stored (any status), so it can skip them before the AI step
+
+**Write endpoints that currently have NO auth (known gap — see §7):**
+- `POST /api/news` — create (used by "Write News")
+- `POST /api/news/bulk` — pipeline's main entry point
+
+  Anyone who finds the URL can add drafts to the review queue. They land
+  as `draft`, so nothing goes live without approval, but the queue could
+  be flooded. Fix: require `X-Admin-Token` here and give the pipeline the
+  token as a GitHub secret.
 
 **Admin (require `X-Admin-Token` header matching the `ADMIN_TOKEN` env var):**
 - `GET /api/admin/news?status=draft|published|archived`
-- `POST /api/news` — create (used by pipeline's bulk push, and by "Write News")
-- `POST /api/news/bulk` — pipeline's main entry point
 - `PATCH /api/admin/news/{id}` — edit any field on any story, any status
 - `POST /api/admin/news/{id}/approve` / `/reject` / `/unpublish`
 - `POST /api/admin/subcategories` — add a custom tag
@@ -126,6 +146,17 @@ built-in list.
    (`&lt;div&gt;` instead of `<div>`) — stripping tags once left the
    escaped tags visible as text. Fixed: `html.unescape()` before
    BeautifulSoup parsing.
+7. **Every run paid the AI to rewrite stories it already had** — the
+   dedup only compared stories within one run, and the database rejected
+   repeats only *after* the AI call. ~100 stories × 8 runs/day were
+   re-rewritten, an estimated $200–300/month. Fixed: `filter_already_stored()`
+   calls `/api/news/existing-links` before the AI step. If that call fails
+   it falls back to rewriting everything (safe, just costly).
+8. **Foreign jobs reached the AI** — Razorpay's Malaysia/Singapore roles and
+   AlphaGrep's Shanghai roles. Fixed: `is_india_or_remote()`. It matches
+   whole words only (so "Indiana" isn't India) and checks the office name
+   too. If a real Indian city gets dropped, add it to `INDIA_PLACES`
+   (Gandhinagar was the first one found this way).
 
 ---
 
@@ -136,6 +167,20 @@ built-in list.
   rewrite call that produces the headline/summary — never generated
   live per reader. This was a deliberate rejection of a "live Q&A"
   feature that would have scaled cost with traffic.
+- **The AI call is set up for lowest cost:**
+  - Everything that can be filtered without AI is filtered first
+    (already-stored stories, non-India jobs, expired Employment News rows).
+  - All rewrites in a run go as one **Message Batch** (50% off). If the
+    batch runs past 45 min it's cancelled, finished stories are still
+    pushed, unfinished ones retry next run, and the run exits non-zero
+    so the failure email fires.
+  - Model is **`claude-sonnet-5`** with `thinking: {type: "disabled"}`.
+    Sonnet 5 thinks by default and thinking tokens are billed as output.
+    `max_tokens` is 800 because Sonnet 5's tokenizer counts ~30% more
+    tokens than 4.6 did. Net saving vs Sonnet 4.6 is only ~13%, not
+    33%, because of that tokenizer.
+  - Not done: Haiku 4.5 (~67% cheaper, quality untested) and prompt
+    caching (too few calls per run to benefit).
 - **"News" is a real 5th category**, separate from the four actionable
   ones. The AI is instructed to prefer "News" whenever a story is
   commentary/analysis rather than something with a specific action to
@@ -154,10 +199,15 @@ built-in list.
 ## 6. Deployment
 
 - **Backend:** Render (free tier — spins down after 15 min idle, ~30-50s
-  cold start on next request)
-- **Database:** Render Postgres (free tier)
+  cold start on next request). Live at `https://educationalnews.onrender.com`.
+- **Database:** Render Postgres (free tier). **⚠ Free Render databases
+  expire 30 days after creation**, then deletion after a 14-day grace
+  period. The repo started 2026-09-18, so expect expiry around mid-October
+  2026 — check the real date in the Render dashboard. Options: upgrade
+  on Render (~$6/mo) or move to Neon/Supabase free tier.
 - **Scheduler:** GitHub Actions, `.github/workflows/fetch-news.yml`,
-  cron `0 */3 * * *` (every 3 hours), plus manual "Run workflow"
+  cron `0 */3 * * *` (every 3 hours), plus manual "Run workflow".
+  Job timeout 90 min. Repo is public, so Actions minutes are free.
 - **Secrets needed in GitHub:** `ANTHROPIC_API_KEY`, `EMAIL_USERNAME`,
   `EMAIL_APP_PASSWORD`, `EMAIL_TO` (failure alerts)
 - **Repo variable needed:** `NEWS_API_URL` = your Render URL
@@ -186,8 +236,32 @@ button, shareable deadline images, offline reading, text-to-speech,
 visual deadline calendar, exam comparison tool, application history
 timeline.
 
-**Immediate next step suggested:** deploy `index.html` to Vercel/Netlify
-so the app has a real public URL, not just a chat preview.
+**Pending, in priority order (as of 2026-09-23):**
+1. **Database expiry** — upgrade or migrate before mid-October (see §6).
+2. **Lock down `POST /api/news` and `/api/news/bulk`** with the admin
+   token (see §3).
+3. **Deploy `index.html`** to Vercel/Netlify for a real public URL.
+4. **More Greenhouse companies** — TheirStack lists 241 Indian companies
+   on Greenhouse; ~45 were revealed with the free account's 50 credits
+   (used up 2026-09-24) and 14 new working boards added. Revealing more
+   needs a paid plan or next month's credits. Test each name against
+   `boards-api.greenhouse.io/v1/boards/<slug>/jobs` before adding.
+
+---
+
+## 7b. Recurring costs (estimates, 2026-09-23)
+
+| Item | Now | To go live |
+|---|---|---|
+| Anthropic API | ~$5–12/mo after the fixes above (was ~$200–300) | same |
+| Render web service | $0 free | $7/mo Starter, or $0 with a keep-alive ping |
+| Postgres | $0 free (expires!) | ~$6/mo Render, or $0 on Neon/Supabase |
+| GitHub Actions | $0 (public repo) | $0 |
+| Frontend (Vercel/Netlify) | — | $0 |
+| Domain (.in) | — | ~₹600–1,000/year |
+
+Check real AI spend on the Anthropic Console usage page — these are
+estimates from the code, not measured.
 
 ---
 
