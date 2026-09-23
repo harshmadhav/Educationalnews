@@ -97,7 +97,7 @@ def fetch_employment_news_articles(category="govt_jobs", limit=30):
     """
     Matches the shape of fetch_articles() in the main pipeline script,
     so its output can go straight into deduplicate_articles() and
-    rewrite_with_ai() unchanged. Only includes vacancies that are
+    rewrite_all_with_ai() unchanged. Only includes vacancies that are
     still open (last date hasn't passed).
     """
     rows = find_jobs_table()

@@ -16,7 +16,9 @@ USAGE:
 
 import os
 import re
+import sys
 import json
+import time
 import feedparser
 import requests
 from bs4 import BeautifulSoup
@@ -301,7 +303,8 @@ Original title: {title}
 Original content: {content}
 """
 
-def rewrite_with_ai(title, raw_text, category):
+def build_rewrite_params(title, raw_text, category):
+    """The Claude request for one article (sent as part of a batch)."""
     original_options = SUBCATEGORY_OPTIONS.get(category, [])
     news_options = SUBCATEGORY_OPTIONS.get("news", [])
     prompt = REWRITE_PROMPT.format(
@@ -311,19 +314,74 @@ def rewrite_with_ai(title, raw_text, category):
         news_subcategory_options=", ".join(news_options),
         state_options=", ".join(INDIAN_STATES),
     )
-    response = client.messages.create(
-        model="claude-sonnet-5",
+    return {
+        "model": "claude-sonnet-5",
         # Sonnet 5's tokenizer counts ~30% more tokens than Sonnet 4.6 for
         # the same text, so 500 could cut the JSON off mid-way. This is a
         # ceiling, not a charge — you only pay for tokens actually generated.
-        max_tokens=800,
+        "max_tokens": 800,
         # Sonnet 5 thinks by default (4.6 didn't). This is a simple
         # extraction task, and thinking tokens are billed at the output
         # rate, so keep it off — same behaviour and cost profile as before.
-        thinking={"type": "disabled"},
-        messages=[{"role": "user", "content": prompt}],
-    )
-    text = next((b.text for b in response.content if b.type == "text"), "").strip()
+        "thinking": {"type": "disabled"},
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+
+# The Batch API bills at 50% of normal prices. Most batches finish within
+# minutes; if one takes longer than this, cancel it and keep whatever
+# finished — unfinished stories aren't stored, so the next run retries them.
+BATCH_MAX_WAIT_MINUTES = 45
+BATCH_POLL_SECONDS = 30
+
+
+def rewrite_all_with_ai(articles):
+    """
+    Sends every article's rewrite request to Claude as ONE batch (half
+    price), waits for it to finish, and returns
+    (results, timed_out) where results maps article index → validated
+    AI result. Articles missing from results failed or didn't finish;
+    they're left out of this run and picked up again by the next one.
+    """
+    if not articles:
+        return {}, False
+
+    batch = client.messages.batches.create(requests=[
+        {"custom_id": f"article-{i}",
+         "params": build_rewrite_params(a["title"], a["raw_summary"], a["category"])}
+        for i, a in enumerate(articles)
+    ])
+    print(f"Submitted batch {batch.id} with {len(articles)} request(s).")
+
+    deadline = time.time() + BATCH_MAX_WAIT_MINUTES * 60
+    timed_out = False
+    while batch.processing_status != "ended":
+        if time.time() > deadline and not timed_out:
+            print(f"  Batch still running after {BATCH_MAX_WAIT_MINUTES} min — "
+                  f"cancelling; unfinished stories will be retried next run.")
+            client.messages.batches.cancel(batch.id)
+            timed_out = True
+        time.sleep(BATCH_POLL_SECONDS)
+        batch = client.messages.batches.retrieve(batch.id)
+    counts = batch.request_counts
+    print(f"  Batch ended: {counts.succeeded} succeeded, {counts.errored} errored, "
+          f"{counts.canceled} canceled, {counts.expired} expired.")
+
+    results = {}
+    for entry in client.messages.batches.results(batch.id):
+        i = int(entry.custom_id.split("-", 1)[1])
+        a = articles[i]
+        if entry.result.type != "succeeded":
+            print(f"  Not rewritten ({entry.result.type}), will retry next run: {a['title'][:80]}")
+            continue
+        text = next((b.text for b in entry.result.message.content if b.type == "text"), "")
+        results[i] = parse_ai_result(text, a["title"], a["raw_summary"], a["category"])
+    return results, timed_out
+
+
+def parse_ai_result(text, title, raw_text, category):
+    """Turns Claude's JSON reply into a validated result dict."""
+    text = text.strip()
     text = text.replace("```json", "").replace("```", "").strip()
     try:
         result = json.loads(text)
@@ -371,8 +429,7 @@ def rewrite_with_ai(title, raw_text, category):
 # 6. BUILD CARD — final Inshorts-style structure
 # ---------------------------------------------------------------------
 
-def build_card(article):
-    ai_result = rewrite_with_ai(article["title"], article["raw_summary"], article["category"])
+def build_card(article, ai_result):
     thumbnail = get_thumbnail(article["link"])
 
     return {
@@ -538,11 +595,15 @@ def run_pipeline():
     # the AI rewrite is the only step that costs money, so filter first
     unique_articles = filter_already_stored(unique_articles)
 
-    # Step 3: rewrite + build cards only for unique articles
+    # Step 3: rewrite all new articles in one half-price batch, then
+    # build cards for the ones that came back
+    ai_results, batch_timed_out = rewrite_all_with_ai(unique_articles)
     all_cards = []
-    for article in unique_articles:
+    for i, article in enumerate(unique_articles):
+        if i not in ai_results:
+            continue
         try:
-            card = build_card(article)
+            card = build_card(article, ai_results[i])
             all_cards.append(card)
             print(f"  Processed: {card['headline']}")
         except Exception as e:
@@ -553,6 +614,11 @@ def run_pipeline():
 
     print(f"\nSaved {len(all_cards)} cards to news_cards.json")
     push_to_api(all_cards)
+
+    # Fail the run (which triggers the email alert) if the batch didn't
+    # finish in time — finished stories were still pushed above.
+    if batch_timed_out:
+        sys.exit(f"Batch didn't finish within {BATCH_MAX_WAIT_MINUTES} min.")
 
 
 if __name__ == "__main__":

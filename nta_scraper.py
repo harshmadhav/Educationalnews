@@ -8,7 +8,7 @@ articles or an RSS feed. This scraper:
   3. Downloads new PDFs and extracts their text
   4. Returns them in the same shape as fetch_articles() in the main
      pipeline, so they can go straight into deduplicate_articles()
-     and rewrite_with_ai() unchanged.
+     and rewrite_all_with_ai() unchanged.
 
 SETUP:
     pip install requests beautifulsoup4 pdfplumber

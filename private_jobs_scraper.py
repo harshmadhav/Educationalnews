@@ -84,7 +84,7 @@ def fetch_private_job_articles(category="private_jobs", limit_per_company=20):
     """
     Matches the shape of fetch_articles() in the main pipeline script,
     so its output can go straight into deduplicate_articles() and
-    rewrite_with_ai() unchanged.
+    rewrite_all_with_ai() unchanged.
 
     Unlike Employment News, each job here has its own real, distinct
     URL from Greenhouse — no artificial uniqueness trick needed.

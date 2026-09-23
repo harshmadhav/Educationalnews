@@ -10,6 +10,8 @@ on:
 jobs:
   fetch-news:
     runs-on: ubuntu-latest
+    # Safety net: the batch step gives up after 45 min on its own
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
