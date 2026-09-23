@@ -8,18 +8,21 @@ calls). No login, no key, no ToS conflict.
 
     GET https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs
 
-CONFIRMED WORKING SLUG (verified 2026-09):
-    razorpaysoftwareprivatelimited  →  Razorpay
-    (found directly in Razorpay's live job posting URLs)
-
-UNVERIFIED — test these yourself, they're guesses based on common
-naming patterns, not confirmed:
+CONFIRMED WORKING SLUGS: see COMPANY_SLUGS below.
     Many companies use a shorter/different token than their brand name
-    (e.g. it might be "razorpay" for some other company, or include
-    "india", "technologies", "pvt-ltd", etc.) There's no public
-    directory to look these up — you have to find one real job URL
-    from each company's careers page and read the slug out of it,
-    the same way we found Razorpay's above.
+    (it may include "india", "securities", "privatelimited", etc.), so
+    guesses usually fail. TheirStack lists Indian companies that use
+    Greenhouse (theirstack.com/en/technology/greenhouse/in) — a good
+    source of names to try.
+
+    Tried and NOT on Greenhouse under these names (2026-09): meesho,
+    cred, dreamplug, freshworks, browserstack, postman, hasura,
+    darwinbox, whatfix, phonepe, myntra.
+
+INDIA-ONLY FILTER:
+    Only jobs located in India (or fully remote) are kept — see
+    is_india_or_remote(). This runs here, before the AI rewrite, so
+    foreign jobs (e.g. AlphaGrep's Shanghai roles) cost zero tokens.
 
 HOW TO ADD A NEW COMPANY:
     1. Google "<company name> careers" and open a specific job listing
@@ -39,14 +42,64 @@ import requests
 from bs4 import BeautifulSoup
 
 COMPANY_SLUGS = [
-    "razorpaysoftwareprivatelimited",  # Razorpay — confirmed working
-
-    # Unverified guesses — test before trusting, see note above:
-    # "meesho", "groww", "cred", "freshworks", "browserstack",
-    # "postman", "hasura", "darwinbox", "whatfix",
+    # All confirmed working 2026-09
+    "razorpaysoftwareprivatelimited",  # Razorpay
+    "groww",                           # Groww
+    "blenheimchalcotindia",            # Blenheim Chalcot India
+    "alphagrepsecurities",             # AlphaGrep Securities (also has China jobs — filtered out)
 ]
 
 API_BASE = "https://boards-api.greenhouse.io/v1/boards"
+
+INDIA_PLACES = [
+    "india",
+    # States and union territories
+    "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh",
+    "goa", "gujarat", "haryana", "himachal pradesh", "jharkhand",
+    "karnataka", "kerala", "madhya pradesh", "maharashtra", "manipur",
+    "meghalaya", "mizoram", "nagaland", "odisha", "orissa", "punjab",
+    "rajasthan", "sikkim", "tamil nadu", "telangana", "tripura",
+    "uttar pradesh", "uttarakhand", "west bengal", "jammu", "kashmir",
+    "ladakh", "puducherry", "pondicherry", "andaman",
+    # Cities (job postings often give only the city)
+    "bengaluru", "bangalore", "mumbai", "navi mumbai", "thane", "pune",
+    "hyderabad", "secunderabad", "chennai", "delhi", "new delhi", "ncr",
+    "gurgaon", "gurugram", "noida", "greater noida", "faridabad",
+    "ghaziabad", "kolkata", "ahmedabad", "gandhinagar", "gift city",
+    "surat", "vadodara", "rajkot", "jaipur", "udaipur", "jodhpur",
+    "kochi", "cochin", "thiruvananthapuram", "trivandrum", "kozhikode",
+    "calicut", "coimbatore", "madurai", "tiruchirappalli", "trichy",
+    "chandigarh", "mohali", "ludhiana", "amritsar", "indore", "bhopal",
+    "mysuru", "mysore", "mangaluru", "mangalore", "hubli", "belgaum",
+    "visakhapatnam", "vizag", "vijayawada", "lucknow", "kanpur", "agra",
+    "varanasi", "prayagraj", "allahabad", "patna", "ranchi", "jamshedpur",
+    "bhubaneswar", "cuttack", "raipur", "nagpur", "nashik", "aurangabad",
+    "dehradun", "guwahati", "shimla", "srinagar",
+]
+# Whole words only, so "Indiana" or "Indianapolis" don't count as India
+INDIA_PATTERN = re.compile(r"\b(" + "|".join(INDIA_PLACES) + r")\b")
+REMOTE_WORDS = re.compile(r"\b(fully|remote|anywhere|work from home|wfh)\b")
+
+
+def is_india_or_remote(job):
+    """
+    Keeps a job if its location or office names an Indian place, or if
+    it's plain remote with no other country attached ("Remote" yes,
+    "Remote - US" no). Everything else — foreign cities, or vague
+    labels like "Multiple Location" with no India office — is dropped.
+    """
+    location = (job.get("location") or {}).get("name", "")
+    offices = " ".join(o.get("name", "") for o in job.get("offices") or [])
+    where = f"{location} {offices}".lower()
+
+    if INDIA_PATTERN.search(where):
+        return True
+    # Remote: whatever's left after removing remote-words and punctuation
+    # must be empty — otherwise it names somewhere else (e.g. "remote us")
+    loc = location.lower()
+    if REMOTE_WORDS.search(loc):
+        return not re.sub(r"[^a-z]", "", REMOTE_WORDS.sub("", loc))
+    return False
 
 
 def fetch_company_jobs(slug, timeout=15):
@@ -91,8 +144,13 @@ def fetch_private_job_articles(category="private_jobs", limit_per_company=20):
     """
     articles = []
     for slug in COMPANY_SLUGS:
-        jobs = fetch_company_jobs(slug)[:limit_per_company]
-        for job in jobs:
+        all_jobs = fetch_company_jobs(slug)
+        # Filter BEFORE the per-company limit, so the limit's slots go to
+        # Indian jobs rather than being used up by foreign ones
+        jobs = [j for j in all_jobs if is_india_or_remote(j)]
+        if len(jobs) < len(all_jobs):
+            print(f"  {slug}: skipped {len(all_jobs) - len(jobs)} job(s) outside India")
+        for job in jobs[:limit_per_company]:
             title = job.get("title", "").strip()
             location = (job.get("location") or {}).get("name", "")
             link = job.get("absolute_url", "")
