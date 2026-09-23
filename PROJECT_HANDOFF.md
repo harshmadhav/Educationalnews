@@ -30,10 +30,12 @@ employment_news_scraper.py → employmentnews.gov.in "All Jobs" table.
 private_jobs_scraper.py   → Greenhouse public Job Board API (free, no key).
                              COMPANY_SLUGS: 18 verified companies
                              (Razorpay, Groww, InMobi, Glance, Navan,
-                             KRAFTON India, Graviton, Karya, …) —
-                             ~187 India/remote jobs, ~500 foreign
-                             jobs dropped. Names tried that failed are
-                             listed in the file's docstring.
+                             KRAFTON India, Graviton, Karya, …).
+                             Keeps India/remote jobs posted in the
+                             last 30 days (~68 of ~720 listed), and
+                             reports each board's open jobs so closed
+                             ones get archived. Names tried that
+                             failed are in the file's docstring.
                              is_india_or_remote() drops non-India jobs
                              BEFORE the AI step (zero tokens spent on
                              them). Source for more company names:
@@ -81,7 +83,8 @@ migration in `schema_postgres.sql`, so re-running the schema is always safe):
 | `deadline` | DATE | AI-extracted "last date to apply," never guessed |
 | `eligibility` / `age_limit` / `application_fee` / `how_to_apply` | TEXT | pre-extracted once by AI, shown as tappable info chips — never generated live per reader (cost control) |
 | `state` | TEXT | one of 33 Indian states/UTs, only when story is state-specific; null = central/all-India |
-| `status` | TEXT | `draft` \| `published` \| `archived` |
+| `status` | TEXT | `draft` \| `published` \| `archived` (rejected, or a job that closed) |
+| `source_key` | TEXT | job board a scraped job came from, e.g. `greenhouse:groww`; used to auto-archive closed jobs. Null for everything else. Not shown in admin/app |
 | `created_at` | TIMESTAMPTZ | |
 
 Second table: `custom_subcategories` (category, slug, label) — lets the
@@ -114,6 +117,10 @@ built-in list.
 - `PATCH /api/admin/news/{id}` — edit any field on any story, any status
 - `POST /api/admin/news/{id}/approve` / `/reject` / `/unpublish`
 - `POST /api/admin/subcategories` — add a custom tag
+- `POST /api/admin/news/sync-open-jobs` — pipeline sends, per job board it
+  fetched successfully, every currently listed link. Stories from that
+  board no longer listed are archived (job closed). Also tags older rows
+  with their `source_key`. Pipeline needs the `ADMIN_TOKEN` GitHub secret.
 
 **Environment variables on Render:** `DATABASE_URL`, `ADMIN_TOKEN`.
 
@@ -190,6 +197,18 @@ built-in list.
   filters.** Nothing is ever hidden — stories are only reordered
   (state match first, then engagement history), so a wrong guess
   never costs the user visibility into something relevant.
+- **Private jobs are kept fresh in three ways:**
+  - Only jobs first posted in the last 30 days are ingested
+    (`MAX_JOB_AGE_DAYS`, using Greenhouse `first_published`, never
+    `updated_at`, which changes on every edit).
+  - Jobs that disappear from their board are archived each run.
+  - A failed board fetch returns `None` (not `[]`) and is excluded
+    from that check, so a timeout can never archive a company's jobs.
+- **Senior roles are ranked lower, not hidden.** `seniorityRank()` in
+  `index.html` sorts private-job headlines matching Senior/Lead/Manager/
+  Head/Director etc. after entry-level ones; Intern/Trainee/Junior/
+  Graduate always count as entry-level. Order is: state → seniority →
+  engagement → recency.
 - **Sponsored content requires a filled-in advertiser name** before
   the compose form will submit — this was intentional, to make an
   empty/missing disclosure impossible rather than just discouraged.
@@ -209,7 +228,8 @@ built-in list.
   cron `0 */3 * * *` (every 3 hours), plus manual "Run workflow".
   Job timeout 90 min. Repo is public, so Actions minutes are free.
 - **Secrets needed in GitHub:** `ANTHROPIC_API_KEY`, `EMAIL_USERNAME`,
-  `EMAIL_APP_PASSWORD`, `EMAIL_TO` (failure alerts)
+  `EMAIL_APP_PASSWORD`, `EMAIL_TO` (failure alerts), `ADMIN_TOKEN`
+  (same value as on Render — for archiving closed jobs)
 - **Repo variable needed:** `NEWS_API_URL` = your Render URL
 - **Frontend (`index.html`):** currently only previewed as a Claude
   artifact — **not yet deployed to a real public URL**. Next step:

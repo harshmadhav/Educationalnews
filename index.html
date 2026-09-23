@@ -539,6 +539,19 @@ function recordEngagement(c){
   try{ localStorage.setItem('studybrief_engagement', JSON.stringify(engagement)); }catch(e){}
 }
 
+// --- Seniority (private jobs only) -----------------------------------------
+// The audience is mostly students and early-career jobseekers, so senior
+// roles are kept but shown after entry-level ones. Checks the headline,
+// which the AI rewrite keeps close to the original job title.
+const SENIOR_TITLE = /\b(senior|sr\.?|lead|principal|staff|head|director|vice president|vp|avp|manager|architect|chief)\b/i;
+const ENTRY_TITLE = /\b(intern|internship|trainee|fresher|freshers|graduate|junior|jr\.?|entry[- ]level|apprentice)\b/i;
+
+function seniorityRank(c){
+  if(c.cat !== 'private') return 0;
+  if(ENTRY_TITLE.test(c.headline)) return 0;   // "Junior Manager" is still entry-level
+  return SENIOR_TITLE.test(c.headline) ? 1 : 0;
+}
+
 function engagementScore(c){
   // Higher = more preferred. Subcategory match counts more than a
   // broad category match, since it's a more specific signal.
@@ -971,14 +984,17 @@ function render(){
   else visible = CARDS.filter(c=>c.cat===activeCat && matchesInterestFilter(c) && matchesSearch(c));
 
   // Order within "All" / category tabs: your state's own stories first
-  // (if you've set one), then a gentle nudge toward categories/tags you
-  // actually tend to read — never hiding anything, just reordering.
+  // (if you've set one), then entry-level jobs ahead of senior ones, then
+  // a gentle nudge toward categories/tags you actually tend to read —
+  // never hiding anything, just reordering.
   if(activeCat==="all" || CATEGORY_HEADINGS[activeCat]){
     visible = visible
       .map((c, i) => ({c, i}))
       .sort((a, b) => {
         const stateDiff = userState ? (statePriority(a.c) - statePriority(b.c)) : 0;
         if(stateDiff !== 0) return stateDiff;
+        const seniorityDiff = seniorityRank(a.c) - seniorityRank(b.c); // senior roles last
+        if(seniorityDiff !== 0) return seniorityDiff;
         const engagementDiff = engagementScore(b.c) - engagementScore(a.c); // higher first
         if(engagementDiff !== 0) return engagementDiff;
         return a.i - b.i; // stable — preserves recency order otherwise

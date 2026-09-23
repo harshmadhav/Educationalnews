@@ -99,6 +99,7 @@ class NewsCardIn(BaseModel):
     application_fee: Optional[str] = None
     how_to_apply: Optional[str] = None
     state: Optional[str] = None
+    source_key: Optional[str] = None  # e.g. "greenhouse:groww" — see sync_open_jobs
 
 
 class NewsCardOut(NewsCardIn):
@@ -195,15 +196,16 @@ def add_news_item(card: NewsCardIn):
                         (category, subcategory, headline, summary, thumbnail_url,
                          source_link, source_domain, published_at, is_original,
                          is_sponsored, sponsor_name, deadline, eligibility,
-                         age_limit, application_fee, how_to_apply, state)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         age_limit, application_fee, how_to_apply, state,
+                         source_key)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (card.category, card.subcategory, card.headline, card.summary,
                      card.thumbnail_url, card.source_link, domain,
                      card.published_at, card.is_original, card.is_sponsored,
                      card.sponsor_name, card.deadline, card.eligibility,
                      card.age_limit, card.application_fee, card.how_to_apply,
-                     card.state),
+                     card.state, card.source_key),
                 )
                 conn.commit()
             except pg_errors.UniqueViolation:
@@ -237,14 +239,15 @@ def add_news_bulk(cards: List[NewsCardIn]):
                         INSERT INTO news_cards
                             (category, subcategory, headline, summary, thumbnail_url,
                              source_link, source_domain, published_at, deadline,
-                             eligibility, age_limit, application_fee, how_to_apply, state)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             eligibility, age_limit, application_fee, how_to_apply, state,
+                             source_key)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (card.category, card.subcategory, card.headline, card.summary,
                          card.thumbnail_url, card.source_link, domain,
                          card.published_at, card.deadline, card.eligibility,
                          card.age_limit, card.application_fee, card.how_to_apply,
-                         card.state),
+                         card.state, card.source_key),
                     )
                     conn.commit()
                     added += 1
@@ -426,6 +429,51 @@ def edit_card(card_id: int, edit: NewsCardEdit):
             if not row:
                 raise HTTPException(status_code=404, detail="Not found")
             return row
+
+
+class OpenJobsIn(BaseModel):
+    source_key: str          # one job board, e.g. "greenhouse:groww"
+    open_links: List[str]    # EVERY job currently listed on that board
+
+
+@app.post("/api/admin/news/sync-open-jobs", dependencies=[Depends(verify_admin)])
+def sync_open_jobs(boards: List[OpenJobsIn]):
+    """
+    Called by the pipeline after each run, once per job board it fetched
+    successfully. For each board:
+      1. tags stored stories whose link is on the board with its
+         source_key (so jobs stored before this column existed get
+         covered too), then
+      2. archives that board's draft/published stories whose link is no
+         longer listed — the position has closed.
+    The pipeline must only send boards it fetched successfully; a failed
+    fetch sent as an empty list would archive every job from that board.
+    Archived stories stay visible in the admin tool and can be re-approved.
+    """
+    tagged, closed = 0, 0
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            for board in boards:
+                cur.execute(
+                    """
+                    UPDATE news_cards SET source_key = %s
+                    WHERE source_key IS NULL AND source_link = ANY(%s)
+                    """,
+                    (board.source_key, board.open_links),
+                )
+                tagged += cur.rowcount
+                cur.execute(
+                    """
+                    UPDATE news_cards SET status = 'archived'
+                    WHERE source_key = %s
+                      AND status IN ('draft', 'published')
+                      AND NOT (source_link = ANY(%s))
+                    """,
+                    (board.source_key, board.open_links),
+                )
+                closed += cur.rowcount
+        conn.commit()
+    return {"tagged": tagged, "closed": closed}
 
 
 @app.post("/api/admin/reset-to-draft", dependencies=[Depends(verify_admin)])

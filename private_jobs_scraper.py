@@ -45,6 +45,7 @@ SETUP:
 
 import re
 import html as html_module
+from datetime import datetime, timezone
 import requests
 from bs4 import BeautifulSoup
 
@@ -124,22 +125,43 @@ def is_india_or_remote(job):
     return False
 
 
-def fetch_company_jobs(slug, timeout=15):
+def fetch_company_jobs(slug, timeout=30):
     """
     Fetches all open jobs for one company from Greenhouse's public API.
-    Returns an empty list (not an error) if the slug is wrong or the
-    company doesn't use Greenhouse — this is a normal, expected outcome
-    for a guessed slug, not a bug.
+    Returns None if the request failed (wrong slug, timeout, server
+    error) — distinct from [] (board exists, no open jobs). The difference
+    matters: an empty board means every stored job from it has closed,
+    while a failed fetch tells us nothing.
     """
     url = f"{API_BASE}/{slug}/jobs?content=true"
     try:
         resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
         if resp.status_code != 200:
-            return []
-        data = resp.json()
-        return data.get("jobs", [])
+            return None
+        jobs = resp.json().get("jobs")
+        return jobs if isinstance(jobs, list) else None
     except (requests.RequestException, ValueError):
-        return []
+        return None
+
+
+# Only jobs first posted within this many days are sent to the AI. Many
+# boards keep roles listed for months; half of the Indian jobs checked in
+# 2026-09 were over 2 months old. Older jobs are skipped at zero cost.
+MAX_JOB_AGE_DAYS = 30
+
+
+def job_age_days(job):
+    """Days since the job was first posted, or None if unknown.
+    Uses first_published — updated_at changes whenever the posting is
+    edited, so it would make old jobs look new."""
+    stamp = job.get("first_published") or job.get("updated_at")
+    if not stamp:
+        return None
+    try:
+        posted = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    return (datetime.now(timezone.utc) - posted).days
 
 
 def html_to_text(html, max_chars=1500):
@@ -163,15 +185,36 @@ def fetch_private_job_articles(category="private_jobs", limit_per_company=20):
 
     Unlike Employment News, each job here has its own real, distinct
     URL from Greenhouse — no artificial uniqueness trick needed.
+
+    Returns (articles, open_links_by_board). The second is every job
+    currently listed on each board fetched successfully (all locations,
+    all ages) — the pipeline uses it to archive stored jobs that have
+    since closed. Boards whose fetch failed are left out of it.
     """
     articles = []
+    open_links_by_board = {}
     for slug in COMPANY_SLUGS:
         all_jobs = fetch_company_jobs(slug)
+        if all_jobs is None:
+            print(f"  {slug}: fetch failed — skipped this run")
+            continue
+        source_key = f"greenhouse:{slug}"
+        open_links_by_board[source_key] = [
+            j["absolute_url"] for j in all_jobs if j.get("absolute_url")
+        ]
+
         # Filter BEFORE the per-company limit, so the limit's slots go to
-        # Indian jobs rather than being used up by foreign ones
-        jobs = [j for j in all_jobs if is_india_or_remote(j)]
-        if len(jobs) < len(all_jobs):
-            print(f"  {slug}: skipped {len(all_jobs) - len(jobs)} job(s) outside India")
+        # recent Indian jobs rather than being used up by foreign/old ones
+        indian = [j for j in all_jobs if is_india_or_remote(j)]
+        jobs = [j for j in indian
+                if (job_age_days(j) is None or job_age_days(j) <= MAX_JOB_AGE_DAYS)]
+        skipped = []
+        if len(indian) < len(all_jobs):
+            skipped.append(f"{len(all_jobs) - len(indian)} outside India")
+        if len(jobs) < len(indian):
+            skipped.append(f"{len(indian) - len(jobs)} older than {MAX_JOB_AGE_DAYS} days")
+        if skipped:
+            print(f"  {slug}: skipped {', '.join(skipped)}")
         for job in jobs[:limit_per_company]:
             title = job.get("title", "").strip()
             location = (job.get("location") or {}).get("name", "")
@@ -190,9 +233,12 @@ def fetch_private_job_articles(category="private_jobs", limit_per_company=20):
                 "title": f"{title} — {location}" if location else title,
                 "link": link,
                 "raw_summary": raw_summary,
-                "published": job.get("updated_at", ""),
+                # first_published, not updated_at: editing a posting
+                # bumps updated_at and would make an old job look new
+                "published": job.get("first_published") or job.get("updated_at", ""),
+                "source_key": source_key,
             })
-    return articles
+    return articles, open_links_by_board
 
 
 if __name__ == "__main__":
@@ -204,12 +250,12 @@ if __name__ == "__main__":
     total = 0
     for slug in COMPANY_SLUGS:
         jobs = fetch_company_jobs(slug)
-        print(f"  {slug}: {len(jobs)} job(s) found")
-        total += len(jobs)
+        print(f"  {slug}: {'FETCH FAILED' if jobs is None else f'{len(jobs)} job(s) found'}")
+        total += len(jobs or [])
 
     print(f"\nTotal: {total} job(s) across {len(COMPANY_SLUGS)} compan(y/ies)\n")
 
-    results = fetch_private_job_articles()
+    results, _ = fetch_private_job_articles()
     for a in results[:10]:  # just show the first 10 so this doesn't flood your terminal
         print(f"- {a['title']}")
         print(f"  {a['raw_summary'][:150]}...")

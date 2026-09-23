@@ -30,6 +30,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NEWS_API_URL: ${{ vars.NEWS_API_URL }}
+          # Same value as ADMIN_TOKEN on Render — lets the pipeline archive
+          # closed jobs. If the secret is missing, that step is skipped.
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
         run: |
           python edu_news_pipeline.py
 

@@ -87,6 +87,13 @@ ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS application_fee TEXT;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS how_to_apply TEXT;
 ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS state TEXT;
 
+-- Which job board a scraped job came from, e.g. 'greenhouse:groww'. Lets
+-- the pipeline archive a job automatically once it disappears from that
+-- board (i.e. the position closed). Null for everything else.
+ALTER TABLE news_cards ADD COLUMN IF NOT EXISTS source_key TEXT;
+CREATE INDEX IF NOT EXISTS idx_news_source_key
+    ON news_cards (source_key);
+
 -- Fast filtering by subcategory (the "Customize" feature's main query)
 CREATE INDEX IF NOT EXISTS idx_news_subcategory
     ON news_cards (subcategory);

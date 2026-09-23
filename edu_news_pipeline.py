@@ -446,6 +446,7 @@ def build_card(article, ai_result):
         "application_fee": ai_result.get("application_fee"),
         "how_to_apply": ai_result.get("how_to_apply"),
         "state": ai_result.get("state"),
+        "source_key": article.get("source_key"),
     }
 
 
@@ -503,6 +504,32 @@ def filter_already_stored(articles):
     return new_articles
 
 
+def close_filled_jobs(open_links_by_board):
+    """
+    Archives stored jobs that are no longer listed on their job board —
+    the position has closed, so it shouldn't stay in the app. Only boards
+    fetched successfully this run are sent (see private_jobs_scraper).
+    Needs ADMIN_TOKEN (same value as on Render) since it changes stories.
+    """
+    if not open_links_by_board:
+        return
+    token = os.environ.get("ADMIN_TOKEN")
+    if not token:
+        print("ADMIN_TOKEN not set — skipping the closed-jobs check.")
+        return
+    payload = [{"source_key": key, "open_links": links}
+               for key, links in open_links_by_board.items()]
+    try:
+        resp = requests.post(f"{API_URL}/api/admin/news/sync-open-jobs", json=payload,
+                             headers={"X-Admin-Token": token}, timeout=60)
+        resp.raise_for_status()
+        result = resp.json()
+        print(f"Closed jobs: {result['closed']} archived "
+              f"({result['tagged']} older stored job(s) linked to their board).")
+    except (requests.RequestException, KeyError, ValueError) as e:
+        print(f"Could not run the closed-jobs check ({e}).")
+
+
 def push_to_api(cards):
     """Sends the finished cards to the backend API (see api.py) so the
     app's live feed picks them up. Falls back gracefully if the API
@@ -522,6 +549,7 @@ def push_to_api(cards):
             "application_fee": c.get("application_fee"),
             "how_to_apply": c.get("how_to_apply"),
             "state": c.get("state"),
+            "source_key": c.get("source_key"),
         }
         for c in cards
     ]
@@ -576,10 +604,11 @@ def run_pipeline():
     # Also pull private-sector job postings from Greenhouse's public
     # Job Board API (see COMPANY_SLUGS in private_jobs_scraper.py),
     # if the scraper module is present alongside this script.
+    open_links_by_board = {}
     if PRIVATE_JOBS_SCRAPER_AVAILABLE:
         print("Fetching: Private jobs (Greenhouse) ...")
         try:
-            pj_articles = fetch_private_job_articles()
+            pj_articles, open_links_by_board = fetch_private_job_articles()
             print(f"  Found {len(pj_articles)} private job posting(s).")
             all_articles.extend(pj_articles)
         except Exception as e:
@@ -614,6 +643,9 @@ def run_pipeline():
 
     print(f"\nSaved {len(all_cards)} cards to news_cards.json")
     push_to_api(all_cards)
+
+    # Step 4: archive jobs that have closed since earlier runs (no AI cost)
+    close_filled_jobs(open_links_by_board)
 
     # Fail the run (which triggers the email alert) if the batch didn't
     # finish in time — finished stories were still pushed above.
