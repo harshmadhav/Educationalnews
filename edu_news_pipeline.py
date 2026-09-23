@@ -312,11 +312,18 @@ def rewrite_with_ai(title, raw_text, category):
         state_options=", ".join(INDIAN_STATES),
     )
     response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=500,
+        model="claude-sonnet-5",
+        # Sonnet 5's tokenizer counts ~30% more tokens than Sonnet 4.6 for
+        # the same text, so 500 could cut the JSON off mid-way. This is a
+        # ceiling, not a charge — you only pay for tokens actually generated.
+        max_tokens=800,
+        # Sonnet 5 thinks by default (4.6 didn't). This is a simple
+        # extraction task, and thinking tokens are billed at the output
+        # rate, so keep it off — same behaviour and cost profile as before.
+        thinking={"type": "disabled"},
         messages=[{"role": "user", "content": prompt}],
     )
-    text = response.content[0].text.strip()
+    text = next((b.text for b in response.content if b.type == "text"), "").strip()
     text = text.replace("```json", "").replace("```", "").strip()
     try:
         result = json.loads(text)
