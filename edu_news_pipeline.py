@@ -415,6 +415,30 @@ def fetch_custom_subcategories():
     except requests.RequestException as e:
         print(f"Could not load custom sub-interest tags ({e}) — using built-in list only.")
 
+def filter_already_stored(articles):
+    """
+    Drops articles whose link is already in the database (any status),
+    BEFORE the AI rewrite step. Each run re-fetches mostly the same
+    stories, and without this check every one of them was rewritten
+    (and paid for) again, only for the API to reject it as a duplicate.
+    If the API is unreachable, keeps everything — same as before.
+    """
+    links = [a["link"] for a in articles]
+    try:
+        resp = requests.post(f"{API_URL}/api/news/existing-links", json=links, timeout=60)
+        resp.raise_for_status()
+        existing = set(resp.json()["existing"])
+    except (requests.RequestException, KeyError, ValueError) as e:
+        print(f"Could not check for already-stored stories ({e}) — "
+              f"rewriting all {len(articles)}.")
+        return articles
+
+    new_articles = [a for a in articles if a["link"] not in existing]
+    print(f"Already stored: {len(articles) - len(new_articles)} skipped, "
+          f"{len(new_articles)} new story/stories to rewrite.")
+    return new_articles
+
+
 def push_to_api(cards):
     """Sends the finished cards to the backend API (see api.py) so the
     app's live feed picks them up. Falls back gracefully if the API
@@ -502,6 +526,10 @@ def run_pipeline():
 
     # Step 2: remove duplicates across all categories/sources
     unique_articles = deduplicate_articles(all_articles)
+
+    # Step 2b: skip stories already in the database from earlier runs —
+    # the AI rewrite is the only step that costs money, so filter first
+    unique_articles = filter_already_stored(unique_articles)
 
     # Step 3: rewrite + build cards only for unique articles
     all_cards = []

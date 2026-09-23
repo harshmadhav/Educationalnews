@@ -255,6 +255,26 @@ def add_news_bulk(cards: List[NewsCardIn]):
     return {"added": added, "skipped_duplicates": skipped}
 
 
+@app.post("/api/news/existing-links")
+def existing_links(links: List[str]):
+    """Called by the pipeline BEFORE the AI rewrite step: given a list of
+    source_links, returns the ones already stored (in any status — draft,
+    published, or archived). The pipeline skips those, so it doesn't pay
+    to rewrite a story the database would reject as a duplicate anyway."""
+    if len(links) > 1000:
+        raise HTTPException(status_code=400, detail="Too many links (max 1000)")
+    if not links:
+        return {"existing": []}
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT source_link FROM news_cards WHERE source_link = ANY(%s)",
+                (links,),
+            )
+            return {"existing": [row[0] for row in cur.fetchall()]}
+
+
 class CustomSubcategoryIn(BaseModel):
     category: str
     slug: str
